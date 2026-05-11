@@ -44,7 +44,6 @@ position[4] * velocity[4] + 2
 - `+`, `-`, `*`, `/`, and unary `-` build lazy expressions.
 - Scalars are broadcast across the selected domain indices.
 - `unchecked_eval_to(out, expr)` is the fast unchecked evaluation path.
-- `eval_to(out, expr)` remains as a deprecated compatibility alias.
 - `checked_eval_to(out, expr)` detects out-of-range masks, mask mismatches,
   undersized sources, and insufficient output capacity. Its `eval_result`
   reports `selected_size` and, when relevant, `required_source_size`.

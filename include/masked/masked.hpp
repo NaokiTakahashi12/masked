@@ -593,12 +593,6 @@ public:
     return values_[index];
   }
 
-  [[nodiscard, deprecated("use unchecked_value_at() to make unchecked access "
-                          "explicit")]] constexpr auto
-  value_at(std::size_t index) const noexcept -> T & {
-    return unchecked_value_at(index);
-  }
-
   constexpr void advance(state_type &state) const noexcept {
     state.index = state.cursor.next();
   }
@@ -678,12 +672,6 @@ public:
     return values_[index];
   }
 
-  [[nodiscard, deprecated("use unchecked_value_at() to make unchecked access "
-                          "explicit")]] constexpr auto
-  value_at(std::size_t index) const noexcept -> T & {
-    return unchecked_value_at(index);
-  }
-
   constexpr void advance(state_type &state) const noexcept {
     state.index = state.cursor.next();
   }
@@ -727,12 +715,6 @@ public:
   [[nodiscard]] constexpr auto unchecked_value_at(std::size_t) const noexcept
       -> const value_type & {
     return value_;
-  }
-
-  [[nodiscard, deprecated("use unchecked_value_at() to make unchecked access "
-                          "explicit")]] constexpr auto
-  value_at(std::size_t index) const noexcept -> const value_type & {
-    return unchecked_value_at(index);
   }
 
   static constexpr void advance(state_type &) noexcept {}
@@ -968,13 +950,6 @@ public:
     return Op{}(lhs_.unchecked_value_at(index), rhs_.unchecked_value_at(index));
   }
 
-  [[nodiscard, deprecated("use unchecked_value_at() to make unchecked access "
-                          "explicit")]] constexpr auto
-  value_at(std::size_t index) const
-      noexcept(noexcept(unchecked_value_at(index))) -> eval_type {
-    return unchecked_value_at(index);
-  }
-
   constexpr void advance(state_type &state) const noexcept {
     if constexpr (Lhs::has_sequence) {
       lhs_.advance(state.lhs);
@@ -1048,13 +1023,6 @@ public:
           noexcept(std::declval<const Op &>()(expr_.unchecked_value_at(index))))
           -> eval_type {
     return Op{}(expr_.unchecked_value_at(index));
-  }
-
-  [[nodiscard, deprecated("use unchecked_value_at() to make unchecked access "
-                          "explicit")]] constexpr auto
-  value_at(std::size_t index) const
-      noexcept(noexcept(unchecked_value_at(index))) -> eval_type {
-    return unchecked_value_at(index);
   }
 
   constexpr void advance(state_type &state) const noexcept {
@@ -1186,13 +1154,6 @@ template <detail::expression Expr>
 }
 
 template <detail::expression Expr>
-[[nodiscard, deprecated("use selected_size() to clarify that this is the "
-                        "number of selected elements")]] constexpr auto
-output_size(const Expr &expr) noexcept -> std::size_t {
-  return selected_size(expr);
-}
-
-template <detail::expression Expr>
 [[nodiscard]] constexpr auto selected_mask(const Expr &expr) noexcept ->
     typename Expr::mask_type {
   static_assert(
@@ -1299,13 +1260,6 @@ constexpr auto unchecked_eval_to(Out out, const Expr &expr) -> Out {
     }
     return sparse_evaluator{}(out, expr);
   }
-}
-
-template <class Out, detail::expression Expr>
-[[deprecated("use unchecked_eval_to() or checked_eval_to() to be explicit "
-             "about validation")]] constexpr auto
-eval_to(Out out, const Expr &expr) -> Out {
-  return unchecked_eval_to(out, expr);
 }
 
 template <class T, std::size_t Extent, detail::expression Expr>
