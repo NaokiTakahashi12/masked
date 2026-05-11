@@ -81,12 +81,10 @@ TEST(MaskedTest, CheckedPathDetectsMaskMismatch) {
   std::array<int, 3> out{};
 
   const auto expr =
-      masked::select(a,
-                     masked::subset<short_joint_domain>::from_bits_asserted(
-                         0b0111)) +
-      masked::select(b,
-                     masked::subset<short_joint_domain>::from_bits_asserted(
-                         0b0011));
+      masked::select(
+          a, masked::subset<short_joint_domain>::from_bits_asserted(0b0111)) +
+      masked::select(
+          b, masked::subset<short_joint_domain>::from_bits_asserted(0b0011));
   const auto result = masked::checked_eval_to(out, expr);
 
   EXPECT_EQ(result.status, masked::eval_status::mask_mismatch);
@@ -96,10 +94,8 @@ TEST(MaskedTest, CheckedPathDetectsOutputCapacity) {
   std::array<int, short_joint_domain::size> a{1, 2, 3, 4};
   std::array<int, 2> out{};
 
-  const auto expr =
-      masked::select(a,
-                     masked::subset<short_joint_domain>::from_bits_asserted(
-                         0b111));
+  const auto expr = masked::select(
+      a, masked::subset<short_joint_domain>::from_bits_asserted(0b111));
   const auto result = masked::checked_eval_to(out, expr);
 
   EXPECT_EQ(result.status, masked::eval_status::output_too_small);
@@ -128,7 +124,8 @@ TEST(MaskedTest, MakeIndexReturnsOptionalForCheckedConstruction) {
 
 TEST(MaskedTest, MaterializeCreatesIndependentStorage) {
   std::vector<double> values{1.0, 2.0, 3.0, 4.0, 5.0};
-  const auto selected = masked::subset<joint_domain>::from_bits_asserted(0b10101);
+  const auto selected =
+      masked::subset<joint_domain>::from_bits_asserted(0b10101);
 
   auto materialized =
       masked::unchecked_materialize(masked::select(values, selected) + 0.5);
@@ -157,12 +154,10 @@ TEST(MaskedTest, CheckedMaterializeDetectsMaskMismatch) {
   std::array<int, short_joint_domain::size> b{10, 20, 30, 40};
 
   const auto result = masked::checked_materialize(
-      masked::select(a,
-                     masked::subset<short_joint_domain>::from_bits_asserted(
-                         0b0111)) +
-      masked::select(b,
-                     masked::subset<short_joint_domain>::from_bits_asserted(
-                         0b0011)));
+      masked::select(
+          a, masked::subset<short_joint_domain>::from_bits_asserted(0b0111)) +
+      masked::select(
+          b, masked::subset<short_joint_domain>::from_bits_asserted(0b0011)));
 
   EXPECT_EQ(result.result.status, masked::eval_status::mask_mismatch);
   EXPECT_TRUE(result.values.empty());
@@ -171,9 +166,8 @@ TEST(MaskedTest, CheckedMaterializeDetectsMaskMismatch) {
 TEST(MaskedTest, CompileTimeMaskProvidesStaticOutputArray) {
   std::array<int, joint_domain::size> a{1, 2, 3, 4, 5};
 
-  const auto out =
-      masked::unchecked_eval_array(masked::select<joint_domain, 0b10101>(a) *
-                                   2);
+  const auto out = masked::unchecked_eval_array(
+      masked::select<joint_domain, 0b10101>(a) * 2);
 
   static_assert(std::tuple_size_v<decltype(out)> == 3);
   static_assert(std::is_same_v<typename decltype(out)::value_type, int>);
@@ -246,9 +240,8 @@ TEST(MaskedTest, CheckedScatterWritesBackToOriginalIndices) {
 
 TEST(MaskedTest, SelectedSizeReportsNumberOfChosenIndices) {
   std::array<int, joint_domain::size> values{1, 2, 3, 4, 5};
-  const auto expr =
-      masked::select(values,
-                     masked::subset<joint_domain>::from_bits_asserted(0b10011));
+  const auto expr = masked::select(
+      values, masked::subset<joint_domain>::from_bits_asserted(0b10011));
 
   EXPECT_EQ(masked::selected_size(expr), 3U);
 }

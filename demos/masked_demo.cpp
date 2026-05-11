@@ -15,10 +15,10 @@ struct actuator_tag {};
 using actuator_domain = masked::index_domain<actuator_tag, 6, std::uint8_t>;
 
 template <class Range>
-void print_range(std::string_view label, const Range &values) {
+void print_range(std::string_view label, const Range& values) {
   std::cout << label << ": [";
   auto separator = std::string_view{""};
-  for (const auto &value : values) {
+  for (const auto& value : values) {
     std::cout << separator << value;
     separator = ", ";
   }

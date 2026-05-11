@@ -1,0 +1,12 @@
+# There is no single STL-wide official .clang-tidy baseline.
+# Avoid encoding arbitrary house style here; keep this limited to tool-provided
+# diagnostics and static analysis that are broadly useful for library code.
+---
+Checks: >
+  -*,
+  clang-analyzer-*,
+  clang-diagnostic-*
+
+FormatStyle: none
+AnalyzeTemporaryDtors: false
+...

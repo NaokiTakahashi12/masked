@@ -17,7 +17,7 @@ auto make_values(double scale) -> std::array<double, joint_domain::size> {
   return values;
 }
 
-void BM_RuntimeSubsetMaterialize(benchmark::State &state) {
+void BM_RuntimeSubsetMaterialize(benchmark::State& state) {
   auto lhs = make_values(1.0);
   auto rhs = make_values(0.5);
   const auto active =
@@ -30,7 +30,7 @@ void BM_RuntimeSubsetMaterialize(benchmark::State &state) {
   }
 }
 
-void BM_CompileTimeSubsetEvalArray(benchmark::State &state) {
+void BM_CompileTimeSubsetEvalArray(benchmark::State& state) {
   auto lhs = make_values(1.0);
   auto rhs = make_values(0.5);
 
@@ -42,7 +42,7 @@ void BM_CompileTimeSubsetEvalArray(benchmark::State &state) {
   }
 }
 
-void BM_CheckedScatterTo(benchmark::State &state) {
+void BM_CheckedScatterTo(benchmark::State& state) {
   auto base = make_values(1.0);
   const auto active =
       masked::subset<joint_domain>::from_bits_asserted(0b1111000011110000);

@@ -81,13 +81,13 @@ concept mask_integer =
     std::unsigned_integral<T> && !std::same_as<std::remove_cv_t<T>, bool>;
 
 template <class T>
-concept lvalue_contiguous_range = requires(T &values) {
+concept lvalue_contiguous_range = requires(T& values) {
   std::data(values);
   std::size(values);
 };
 
 template <class T>
-concept readable_contiguous_range = requires(const T &values) {
+concept readable_contiguous_range = requires(const T& values) {
   std::data(values);
   std::size(values);
 };
@@ -174,7 +174,7 @@ private:
 
 template <class R>
 using range_element_t =
-    std::remove_pointer_t<decltype(std::data(std::declval<R &>()))>;
+    std::remove_pointer_t<decltype(std::data(std::declval<R&>()))>;
 
 template <class T>
 using output_value_t = std::remove_cv_t<std::remove_reference_t<T>>;
@@ -514,7 +514,7 @@ template <detail::domain Domain, typename Domain::mask_type Lhs,
           typename Domain::mask_type Rhs>
 [[nodiscard]] constexpr auto operator&(subset_c<Domain, Lhs>,
                                        subset_c<Domain, Rhs>) noexcept
-    -> subset_c<Domain, static_cast<typename Domain::mask_type>(Lhs &Rhs)> {
+    -> subset_c<Domain, static_cast<typename Domain::mask_type>(Lhs& Rhs)> {
   return {};
 }
 
@@ -532,7 +532,7 @@ template <detail::domain Domain, typename Domain::mask_type Lhs,
                                         subset_c<Domain, Rhs>) noexcept
     -> subset_c<Domain,
                 static_cast<typename Domain::mask_type>(
-                    Lhs &static_cast<typename Domain::mask_type>(~Rhs))> {
+                    Lhs& static_cast<typename Domain::mask_type>(~Rhs))> {
   return {};
 }
 
@@ -564,7 +564,7 @@ namespace detail {
 
 template <domain Domain, typename Domain::mask_type Mask, std::size_t Index,
           class Fn>
-constexpr void for_each_static_index_impl(Fn &&fn) {
+constexpr void for_each_static_index_impl(Fn&& fn) {
   if constexpr (Index < Domain::size) {
     constexpr auto bit = static_cast<typename Domain::mask_type>(
         typename Domain::mask_type{1} << Index);
@@ -576,14 +576,14 @@ constexpr void for_each_static_index_impl(Fn &&fn) {
 }
 
 template <domain Domain, typename Domain::mask_type Mask, class Fn>
-constexpr void for_each_static_index(Fn &&fn) {
+constexpr void for_each_static_index(Fn&& fn) {
   for_each_static_index_impl<Domain, Mask, 0>(std::forward<Fn>(fn));
 }
 
 } // namespace detail
 
 template <detail::domain Domain, class Fn>
-constexpr void for_each_index(subset<Domain> selected, Fn &&fn) {
+constexpr void for_each_index(subset<Domain> selected, Fn&& fn) {
   assert(selected.in_range());
   if (selected.is_full()) {
     for (std::size_t index = 0; index < Domain::size; ++index) {
@@ -599,12 +599,12 @@ constexpr void for_each_index(subset<Domain> selected, Fn &&fn) {
 }
 
 template <detail::domain Domain, typename Domain::mask_type Mask, class Fn>
-constexpr void for_each_index(subset_c<Domain, Mask>, Fn &&fn) {
+constexpr void for_each_index(subset_c<Domain, Mask>, Fn&& fn) {
   detail::for_each_static_index<Domain, Mask>(std::forward<Fn>(fn));
 }
 
 template <detail::domain Domain, class Pred>
-[[nodiscard]] constexpr auto make_subset_if(Pred &&pred) -> subset<Domain> {
+[[nodiscard]] constexpr auto make_subset_if(Pred&& pred) -> subset<Domain> {
   typename Domain::mask_type mask = 0;
   for (std::size_t index = 0; index < Domain::size; ++index) {
     const auto typed = typed_index<Domain>::unchecked(index);
@@ -622,7 +622,7 @@ public:
   using element_type = T;
   using domain_type = Domain;
   using mask_type = typename Domain::mask_type;
-  using eval_type = T &;
+  using eval_type = T&;
   using value_type = std::remove_cv_t<T>;
   static constexpr bool has_sequence = true;
   static constexpr bool has_static_mask = false;
@@ -666,17 +666,17 @@ public:
     return state;
   }
 
-  [[nodiscard]] constexpr auto value(state_type &state) const noexcept -> T & {
+  [[nodiscard]] constexpr auto value(state_type& state) const noexcept -> T& {
     return values_[state.index];
   }
 
   [[nodiscard]] constexpr auto
-  unchecked_value_at(std::size_t index) const noexcept -> T & {
+  unchecked_value_at(std::size_t index) const noexcept -> T& {
     assert(selected_.contains(index));
     return values_[index];
   }
 
-  constexpr void advance(state_type &state) const noexcept {
+  constexpr void advance(state_type& state) const noexcept {
     state.index = state.cursor.next();
   }
 
@@ -691,7 +691,7 @@ public:
   using element_type = T;
   using domain_type = Domain;
   using mask_type = typename Domain::mask_type;
-  using eval_type = T &;
+  using eval_type = T&;
   using value_type = std::remove_cv_t<T>;
   static constexpr bool has_sequence = true;
   static constexpr bool has_static_mask = true;
@@ -737,19 +737,19 @@ public:
     return state;
   }
 
-  [[nodiscard]] constexpr auto value(state_type &state) const noexcept -> T & {
+  [[nodiscard]] constexpr auto value(state_type& state) const noexcept -> T& {
     return values_[state.index];
   }
 
   [[nodiscard]] constexpr auto
-  unchecked_value_at(std::size_t index) const noexcept -> T & {
+  unchecked_value_at(std::size_t index) const noexcept -> T& {
     assert(Domain::valid_index(index));
     assert((static_mask & static_cast<mask_type>(mask_type{1} << index)) !=
            mask_type{0});
     return values_[index];
   }
 
-  constexpr void advance(state_type &state) const noexcept {
+  constexpr void advance(state_type& state) const noexcept {
     state.index = state.cursor.next();
   }
 
@@ -761,7 +761,7 @@ template <class T> class scalar_expr {
 public:
   using domain_type = void;
   using value_type = std::remove_cv_t<T>;
-  using eval_type = const value_type &;
+  using eval_type = const value_type&;
   static constexpr bool has_sequence = false;
   static constexpr bool has_static_mask = false;
   static constexpr std::size_t static_extent = 0;
@@ -784,17 +784,17 @@ public:
     return {};
   }
 
-  [[nodiscard]] constexpr auto value(state_type &) const noexcept
-      -> const value_type & {
+  [[nodiscard]] constexpr auto value(state_type&) const noexcept
+      -> const value_type& {
     return value_;
   }
 
   [[nodiscard]] constexpr auto unchecked_value_at(std::size_t) const noexcept
-      -> const value_type & {
+      -> const value_type& {
     return value_;
   }
 
-  static constexpr void advance(state_type &) noexcept {}
+  static constexpr void advance(state_type&) noexcept {}
 
 private:
   value_type value_;
@@ -875,7 +875,7 @@ consteval auto combined_static_mask()
 
 struct plus_op {
   template <class Lhs, class Rhs>
-  [[nodiscard]] constexpr auto operator()(Lhs &&lhs, Rhs &&rhs) const
+  [[nodiscard]] constexpr auto operator()(Lhs&& lhs, Rhs&& rhs) const
       noexcept(noexcept(std::forward<Lhs>(lhs) + std::forward<Rhs>(rhs)))
           -> decltype(std::forward<Lhs>(lhs) + std::forward<Rhs>(rhs)) {
     return std::forward<Lhs>(lhs) + std::forward<Rhs>(rhs);
@@ -884,7 +884,7 @@ struct plus_op {
 
 struct minus_op {
   template <class Lhs, class Rhs>
-  [[nodiscard]] constexpr auto operator()(Lhs &&lhs, Rhs &&rhs) const
+  [[nodiscard]] constexpr auto operator()(Lhs&& lhs, Rhs&& rhs) const
       noexcept(noexcept(std::forward<Lhs>(lhs) - std::forward<Rhs>(rhs)))
           -> decltype(std::forward<Lhs>(lhs) - std::forward<Rhs>(rhs)) {
     return std::forward<Lhs>(lhs) - std::forward<Rhs>(rhs);
@@ -893,7 +893,7 @@ struct minus_op {
 
 struct multiply_op {
   template <class Lhs, class Rhs>
-  [[nodiscard]] constexpr auto operator()(Lhs &&lhs, Rhs &&rhs) const
+  [[nodiscard]] constexpr auto operator()(Lhs&& lhs, Rhs&& rhs) const
       noexcept(noexcept(std::forward<Lhs>(lhs) * std::forward<Rhs>(rhs)))
           -> decltype(std::forward<Lhs>(lhs) * std::forward<Rhs>(rhs)) {
     return std::forward<Lhs>(lhs) * std::forward<Rhs>(rhs);
@@ -902,7 +902,7 @@ struct multiply_op {
 
 struct divide_op {
   template <class Lhs, class Rhs>
-  [[nodiscard]] constexpr auto operator()(Lhs &&lhs, Rhs &&rhs) const
+  [[nodiscard]] constexpr auto operator()(Lhs&& lhs, Rhs&& rhs) const
       noexcept(noexcept(std::forward<Lhs>(lhs) / std::forward<Rhs>(rhs)))
           -> decltype(std::forward<Lhs>(lhs) / std::forward<Rhs>(rhs)) {
     return std::forward<Lhs>(lhs) / std::forward<Rhs>(rhs);
@@ -911,14 +911,14 @@ struct divide_op {
 
 struct negate_op {
   template <class Value>
-  [[nodiscard]] constexpr auto operator()(Value &&value) const
+  [[nodiscard]] constexpr auto operator()(Value&& value) const
       noexcept(noexcept(-std::forward<Value>(value)))
           -> decltype(-std::forward<Value>(value)) {
     return -std::forward<Value>(value);
   }
 };
 
-template <class T> [[nodiscard]] constexpr auto as_expr(T &&value) {
+template <class T> [[nodiscard]] constexpr auto as_expr(T&& value) {
   if constexpr (expression<T>) {
     return std::forward<T>(value);
   } else {
@@ -935,7 +935,7 @@ public:
   using rhs_type = Rhs;
   using op_type = Op;
   using domain_type = detail::common_domain_t<Lhs, Rhs>;
-  using eval_type = decltype(std::declval<const Op &>()(
+  using eval_type = decltype(std::declval<const Op&>()(
       std::declval<typename Lhs::eval_type>(),
       std::declval<typename Rhs::eval_type>()));
   using value_type = detail::output_value_t<eval_type>;
@@ -960,8 +960,8 @@ public:
   };
 
   constexpr binary_expr(Lhs lhs, Rhs rhs) noexcept(
-      std::is_nothrow_move_constructible_v<Lhs>
-          &&std::is_nothrow_move_constructible_v<Rhs>)
+      std::is_nothrow_move_constructible_v<Lhs>&&
+          std::is_nothrow_move_constructible_v<Rhs>)
       : lhs_(std::move(lhs)), rhs_(std::move(rhs)) {}
 
   [[nodiscard]] constexpr auto size() const noexcept -> std::size_t {
@@ -1008,21 +1008,21 @@ public:
     return {lhs_.make_state(), rhs_.make_state()};
   }
 
-  [[nodiscard]] constexpr auto value(state_type &state) const
-      noexcept(noexcept(std::declval<const Op &>()(lhs_.value(state.lhs),
-                                                   rhs_.value(state.rhs))))
+  [[nodiscard]] constexpr auto value(state_type& state) const
+      noexcept(noexcept(std::declval<const Op&>()(lhs_.value(state.lhs),
+                                                  rhs_.value(state.rhs))))
           -> eval_type {
     return Op{}(lhs_.value(state.lhs), rhs_.value(state.rhs));
   }
 
   [[nodiscard]] constexpr auto unchecked_value_at(std::size_t index) const
-      noexcept(noexcept(std::declval<const Op &>()(
+      noexcept(noexcept(std::declval<const Op&>()(
           lhs_.unchecked_value_at(index), rhs_.unchecked_value_at(index))))
           -> eval_type {
     return Op{}(lhs_.unchecked_value_at(index), rhs_.unchecked_value_at(index));
   }
 
-  constexpr void advance(state_type &state) const noexcept {
+  constexpr void advance(state_type& state) const noexcept {
     if constexpr (Lhs::has_sequence) {
       lhs_.advance(state.lhs);
     }
@@ -1041,7 +1041,7 @@ public:
   using expr_type = Expr;
   using op_type = Op;
   using domain_type = typename Expr::domain_type;
-  using eval_type = decltype(std::declval<const Op &>()(
+  using eval_type = decltype(std::declval<const Op&>()(
       std::declval<typename Expr::eval_type>()));
   using value_type = detail::output_value_t<eval_type>;
   using mask_type = detail::mask_type_or_t<domain_type>;
@@ -1084,20 +1084,20 @@ public:
     return {expr_.make_state()};
   }
 
-  [[nodiscard]] constexpr auto value(state_type &state) const
-      noexcept(noexcept(std::declval<const Op &>()(expr_.value(state.expr))))
+  [[nodiscard]] constexpr auto value(state_type& state) const
+      noexcept(noexcept(std::declval<const Op&>()(expr_.value(state.expr))))
           -> eval_type {
     return Op{}(expr_.value(state.expr));
   }
 
   [[nodiscard]] constexpr auto unchecked_value_at(std::size_t index) const
       noexcept(
-          noexcept(std::declval<const Op &>()(expr_.unchecked_value_at(index))))
+          noexcept(std::declval<const Op&>()(expr_.unchecked_value_at(index))))
           -> eval_type {
     return Op{}(expr_.unchecked_value_at(index));
   }
 
-  constexpr void advance(state_type &state) const noexcept {
+  constexpr void advance(state_type& state) const noexcept {
     if constexpr (Expr::has_sequence) {
       expr_.advance(state.expr);
     }
@@ -1156,7 +1156,7 @@ public:
     return state;
   }
 
-  [[nodiscard]] constexpr auto value(state_type &state) const noexcept
+  [[nodiscard]] constexpr auto value(state_type& state) const noexcept
       -> eval_type {
     return expr_.unchecked_value_at(state.index);
   }
@@ -1167,7 +1167,7 @@ public:
     return expr_.unchecked_value_at(index);
   }
 
-  constexpr void advance(state_type &state) const noexcept {
+  constexpr void advance(state_type& state) const noexcept {
     state.index = state.cursor.next();
   }
 
@@ -1227,7 +1227,7 @@ public:
     return state;
   }
 
-  [[nodiscard]] constexpr auto value(state_type &state) const noexcept
+  [[nodiscard]] constexpr auto value(state_type& state) const noexcept
       -> eval_type {
     return expr_.unchecked_value_at(state.index);
   }
@@ -1240,7 +1240,7 @@ public:
     return expr_.unchecked_value_at(index);
   }
 
-  constexpr void advance(state_type &state) const noexcept {
+  constexpr void advance(state_type& state) const noexcept {
     state.index = state.cursor.next();
   }
 
@@ -1265,7 +1265,7 @@ struct is_expression<static_restricted_expr<Expr, Mask>> : std::true_type {};
 } // namespace detail
 
 template <detail::lvalue_contiguous_range R, detail::domain Domain>
-[[nodiscard]] constexpr auto select(R &values, subset<Domain> selected) {
+[[nodiscard]] constexpr auto select(R& values, subset<Domain> selected) {
   using element_type = detail::range_element_t<R>;
   constexpr auto source_static_extent = detail::static_extent_of_v<R>;
   if constexpr (source_static_extent != dynamic_extent) {
@@ -1279,7 +1279,7 @@ template <detail::lvalue_contiguous_range R, detail::domain Domain>
 
 template <detail::domain Domain, typename Domain::mask_type Mask,
           detail::lvalue_contiguous_range R>
-[[nodiscard]] constexpr auto select(R &values, subset_c<Domain, Mask> = {}) {
+[[nodiscard]] constexpr auto select(R& values, subset_c<Domain, Mask> = {}) {
   using element_type = detail::range_element_t<R>;
   constexpr auto source_static_extent = detail::static_extent_of_v<R>;
   if constexpr (source_static_extent != dynamic_extent) {
@@ -1292,18 +1292,18 @@ template <detail::domain Domain, typename Domain::mask_type Mask,
 }
 
 template <detail::domain Domain, detail::lvalue_contiguous_range R>
-[[nodiscard]] constexpr auto select_all(R &values) {
+[[nodiscard]] constexpr auto select_all(R& values) {
   return select(values, subset<Domain>::all());
 }
 
 template <detail::domain Domain, detail::lvalue_contiguous_range R>
-[[nodiscard]] constexpr auto select_none(R &values) {
+[[nodiscard]] constexpr auto select_none(R& values) {
   return select(values, subset<Domain>::none());
 }
 
 template <detail::domain Domain, std::size_t Index,
           detail::lvalue_contiguous_range R>
-[[nodiscard]] constexpr auto select_one(R &values) {
+[[nodiscard]] constexpr auto select_one(R& values) {
   static_assert(Domain::valid_index(Index),
                 "masked::select_one index is outside its domain");
   constexpr auto mask = static_cast<typename Domain::mask_type>(
@@ -1313,7 +1313,7 @@ template <detail::domain Domain, std::size_t Index,
 
 template <detail::expression Expr>
 [[nodiscard]] constexpr auto
-restrict_to(Expr &&expr,
+restrict_to(Expr&& expr,
             subset<typename std::remove_cvref_t<Expr>::domain_type> selected) {
   using expr_type = decltype(detail::as_expr(std::forward<Expr>(expr)));
   auto expr_value = detail::as_expr(std::forward<Expr>(expr));
@@ -1323,7 +1323,7 @@ restrict_to(Expr &&expr,
 template <detail::expression Expr, detail::domain Domain,
           typename Domain::mask_type Mask>
 requires std::same_as<typename std::remove_cvref_t<Expr>::domain_type, Domain>
-[[nodiscard]] constexpr auto restrict_to(Expr &&expr, subset_c<Domain, Mask>) {
+[[nodiscard]] constexpr auto restrict_to(Expr&& expr, subset_c<Domain, Mask>) {
   using expr_type = decltype(detail::as_expr(std::forward<Expr>(expr)));
   auto expr_value = detail::as_expr(std::forward<Expr>(expr));
   return static_restricted_expr<expr_type, Mask>(std::move(expr_value));
@@ -1336,7 +1336,7 @@ template <class T> [[nodiscard]] constexpr auto scalar(T value) {
 template <class Lhs, class Rhs>
 requires((detail::expression<Lhs> || detail::expression<Rhs>))
     [[nodiscard]] constexpr auto
-    operator+(Lhs &&lhs, Rhs &&rhs) {
+    operator+(Lhs&& lhs, Rhs&& rhs) {
   auto lhs_expr = detail::as_expr(std::forward<Lhs>(lhs));
   auto rhs_expr = detail::as_expr(std::forward<Rhs>(rhs));
   return binary_expr<decltype(lhs_expr), decltype(rhs_expr), detail::plus_op>(
@@ -1346,7 +1346,7 @@ requires((detail::expression<Lhs> || detail::expression<Rhs>))
 template <class Lhs, class Rhs>
 requires((detail::expression<Lhs> || detail::expression<Rhs>))
     [[nodiscard]] constexpr auto
-    operator-(Lhs &&lhs, Rhs &&rhs) {
+    operator-(Lhs&& lhs, Rhs&& rhs) {
   auto lhs_expr = detail::as_expr(std::forward<Lhs>(lhs));
   auto rhs_expr = detail::as_expr(std::forward<Rhs>(rhs));
   return binary_expr<decltype(lhs_expr), decltype(rhs_expr), detail::minus_op>(
@@ -1356,7 +1356,7 @@ requires((detail::expression<Lhs> || detail::expression<Rhs>))
 template <class Lhs, class Rhs>
 requires((detail::expression<Lhs> || detail::expression<Rhs>))
     [[nodiscard]] constexpr auto
-    operator*(Lhs &&lhs, Rhs &&rhs) {
+    operator*(Lhs&& lhs, Rhs&& rhs) {
   auto lhs_expr = detail::as_expr(std::forward<Lhs>(lhs));
   auto rhs_expr = detail::as_expr(std::forward<Rhs>(rhs));
   return binary_expr<decltype(lhs_expr), decltype(rhs_expr),
@@ -1367,7 +1367,7 @@ requires((detail::expression<Lhs> || detail::expression<Rhs>))
 template <class Lhs, class Rhs>
 requires((detail::expression<Lhs> || detail::expression<Rhs>))
     [[nodiscard]] constexpr auto
-    operator/(Lhs &&lhs, Rhs &&rhs) {
+    operator/(Lhs&& lhs, Rhs&& rhs) {
   auto lhs_expr = detail::as_expr(std::forward<Lhs>(lhs));
   auto rhs_expr = detail::as_expr(std::forward<Rhs>(rhs));
   return binary_expr<decltype(lhs_expr), decltype(rhs_expr), detail::divide_op>(
@@ -1375,14 +1375,14 @@ requires((detail::expression<Lhs> || detail::expression<Rhs>))
 }
 
 template <detail::expression Expr>
-[[nodiscard]] constexpr auto operator-(Expr &&expr) {
+[[nodiscard]] constexpr auto operator-(Expr&& expr) {
   auto expr_value = detail::as_expr(std::forward<Expr>(expr));
   return unary_expr<decltype(expr_value), detail::negate_op>(
       std::move(expr_value));
 }
 
 template <detail::expression Expr>
-[[nodiscard]] constexpr auto selected_size(const Expr &expr) noexcept
+[[nodiscard]] constexpr auto selected_size(const Expr& expr) noexcept
     -> std::size_t {
   static_assert(Expr::has_sequence,
                 "masked::selected_size requires an expression containing "
@@ -1391,7 +1391,7 @@ template <detail::expression Expr>
 }
 
 template <detail::expression Expr>
-[[nodiscard]] constexpr auto selected_mask(const Expr &expr) noexcept ->
+[[nodiscard]] constexpr auto selected_mask(const Expr& expr) noexcept ->
     typename Expr::mask_type {
   static_assert(Expr::has_sequence,
                 "masked::selected_mask requires an expression containing "
@@ -1400,7 +1400,7 @@ template <detail::expression Expr>
 }
 
 template <detail::expression Expr>
-[[nodiscard]] constexpr auto validate(const Expr &expr) noexcept
+[[nodiscard]] constexpr auto validate(const Expr& expr) noexcept
     -> eval_result {
   if constexpr (!Expr::has_sequence) {
     return {eval_status::no_selected_sequence, 0, 0, 0};
@@ -1425,7 +1425,7 @@ template <domain Domain>
 }
 
 template <expression Expr, class Fn>
-constexpr void unchecked_for_each_index_value(const Expr &expr, Fn &&fn) {
+constexpr void unchecked_for_each_index_value(const Expr& expr, Fn&& fn) {
   static_assert(Expr::has_sequence,
                 "masked::unchecked_for_each_index_value requires an "
                 "expression containing select()");
@@ -1463,8 +1463,8 @@ constexpr void unchecked_for_each_index_value(const Expr &expr, Fn &&fn) {
 } // namespace detail
 
 template <class Out, detail::expression Expr>
-constexpr auto unchecked_eval_to(Out out, const Expr &expr) -> Out {
-  auto write = [&](auto, auto &&value) {
+constexpr auto unchecked_eval_to(Out out, const Expr& expr) -> Out {
+  auto write = [&](auto, auto&& value) {
     *out = std::forward<decltype(value)>(value);
     ++out;
   };
@@ -1473,7 +1473,7 @@ constexpr auto unchecked_eval_to(Out out, const Expr &expr) -> Out {
 }
 
 template <class T, std::size_t Extent, detail::expression Expr>
-constexpr auto checked_eval_to(std::span<T, Extent> out, const Expr &expr)
+constexpr auto checked_eval_to(std::span<T, Extent> out, const Expr& expr)
     -> eval_result {
   const auto validation = validate(expr);
   if (!validation) {
@@ -1488,14 +1488,14 @@ constexpr auto checked_eval_to(std::span<T, Extent> out, const Expr &expr)
 }
 
 template <detail::lvalue_contiguous_range R, detail::expression Expr>
-constexpr auto checked_eval_to(R &out, const Expr &expr) -> eval_result {
+constexpr auto checked_eval_to(R& out, const Expr& expr) -> eval_result {
   using element_type = detail::range_element_t<R>;
   return checked_eval_to(
       std::span<element_type>(std::data(out), std::size(out)), expr);
 }
 
 template <class T = void, detail::expression Expr>
-[[nodiscard]] auto unchecked_materialize(const Expr &expr) {
+[[nodiscard]] auto unchecked_materialize(const Expr& expr) {
   static_assert(
       Expr::has_sequence,
       "masked::unchecked_materialize requires an expression containing "
@@ -1508,7 +1508,7 @@ template <class T = void, detail::expression Expr>
 }
 
 template <class T = void, detail::expression Expr>
-[[nodiscard]] auto checked_materialize(const Expr &expr) {
+[[nodiscard]] auto checked_materialize(const Expr& expr) {
   static_assert(
       Expr::has_sequence,
       "masked::checked_materialize requires an expression containing select()");
@@ -1524,7 +1524,7 @@ template <class T = void, detail::expression Expr>
 }
 
 template <class T = void, detail::expression Expr>
-[[nodiscard]] constexpr auto unchecked_eval_array(const Expr &expr) {
+[[nodiscard]] constexpr auto unchecked_eval_array(const Expr& expr) {
   static_assert(Expr::has_sequence, "masked::unchecked_eval_array requires an "
                                     "expression containing select()");
   static_assert(Expr::static_extent != dynamic_extent,
@@ -1538,7 +1538,7 @@ template <class T = void, detail::expression Expr>
 }
 
 template <class T = void, detail::expression Expr>
-[[nodiscard]] constexpr auto checked_eval_array(const Expr &expr) {
+[[nodiscard]] constexpr auto checked_eval_array(const Expr& expr) {
   static_assert(
       Expr::has_sequence,
       "masked::checked_eval_array requires an expression containing select()");
@@ -1557,7 +1557,7 @@ template <class T = void, detail::expression Expr>
 }
 
 template <detail::lvalue_contiguous_range R, detail::expression Expr, class Fn>
-constexpr auto checked_update_selected(R &out, const Expr &expr, Fn &&fn)
+constexpr auto checked_update_selected(R& out, const Expr& expr, Fn&& fn)
     -> eval_result {
   static_assert(
       Expr::has_sequence,
@@ -1577,7 +1577,7 @@ constexpr auto checked_update_selected(R &out, const Expr &expr, Fn &&fn)
 
   auto out_span = std::span<element_type>(std::data(out), std::size(out));
 
-  auto update = [&](auto index_token, auto &&value) {
+  auto update = [&](auto index_token, auto&& value) {
     const auto index = detail::index_value(index_token);
     fn(out_span[index], std::forward<decltype(value)>(value));
   };
@@ -1587,26 +1587,26 @@ constexpr auto checked_update_selected(R &out, const Expr &expr, Fn &&fn)
 }
 
 template <detail::lvalue_contiguous_range R, detail::expression Expr>
-constexpr auto checked_scatter_to(R &out, const Expr &expr) -> eval_result {
+constexpr auto checked_scatter_to(R& out, const Expr& expr) -> eval_result {
   return checked_update_selected(out, expr,
-                                 [](auto &dst, auto &&value) { dst = value; });
+                                 [](auto& dst, auto&& value) { dst = value; });
 }
 
 template <detail::lvalue_contiguous_range R, detail::expression Expr>
-constexpr auto checked_add_to(R &out, const Expr &expr) -> eval_result {
+constexpr auto checked_add_to(R& out, const Expr& expr) -> eval_result {
   return checked_update_selected(out, expr,
-                                 [](auto &dst, auto &&value) { dst += value; });
+                                 [](auto& dst, auto&& value) { dst += value; });
 }
 
 template <detail::lvalue_contiguous_range R, detail::expression Expr>
-constexpr auto checked_subtract_from(R &out, const Expr &expr) -> eval_result {
+constexpr auto checked_subtract_from(R& out, const Expr& expr) -> eval_result {
   return checked_update_selected(out, expr,
-                                 [](auto &dst, auto &&value) { dst -= value; });
+                                 [](auto& dst, auto&& value) { dst -= value; });
 }
 
 template <class T = void, detail::expression Expr>
 [[nodiscard]] constexpr auto checked_domain_array(
-    const Expr &expr,
+    const Expr& expr,
     detail::requested_or_inferred_t<T, typename Expr::value_type> fill = {}) {
   static_assert(
       Expr::has_sequence,
@@ -1617,14 +1617,14 @@ template <class T = void, detail::expression Expr>
       detail::requested_or_inferred_t<T, typename Expr::value_type>;
   array_result<output_type, domain_type::size> result{};
   result.result = validate(expr);
-  for (auto &value : result.values) {
+  for (auto& value : result.values) {
     value = fill;
   }
   if (!result) {
     return result;
   }
 
-  auto write = [&](auto index_token, auto &&value) {
+  auto write = [&](auto index_token, auto&& value) {
     result.values[detail::index_value(index_token)] =
         std::forward<decltype(value)>(value);
   };
@@ -1633,8 +1633,8 @@ template <class T = void, detail::expression Expr>
 }
 
 template <detail::lvalue_contiguous_range R, detail::domain Domain, class Value>
-constexpr auto checked_fill_selected(R &out, subset<Domain> selected,
-                                     Value &&value) -> eval_result {
+constexpr auto checked_fill_selected(R& out, subset<Domain> selected,
+                                     Value&& value) -> eval_result {
   if (!selected.in_range()) {
     return {eval_status::mask_out_of_range, selected.count(), 0, 0};
   }
@@ -1651,7 +1651,7 @@ constexpr auto checked_fill_selected(R &out, subset<Domain> selected,
 
 template <detail::lvalue_contiguous_range Out,
           detail::readable_contiguous_range Compact, detail::domain Domain>
-constexpr auto checked_scatter_compact_to(Out &out, const Compact &compact,
+constexpr auto checked_scatter_compact_to(Out& out, const Compact& compact,
                                           subset<Domain> selected)
     -> eval_result {
   if (!selected.in_range()) {
@@ -1666,7 +1666,7 @@ constexpr auto checked_scatter_compact_to(Out &out, const Compact &compact,
 
   using out_element_type = detail::range_element_t<Out>;
   auto out_span = std::span<out_element_type>(std::data(out), std::size(out));
-  const auto *compact_data = std::data(compact);
+  const auto* compact_data = std::data(compact);
 
   std::size_t rank = 0;
   for_each_index(selected, [&](auto index) {
@@ -1677,7 +1677,7 @@ constexpr auto checked_scatter_compact_to(Out &out, const Compact &compact,
 
 template <class T = void, detail::readable_contiguous_range R,
           detail::domain Domain>
-[[nodiscard]] auto checked_gather_compact_from(const R &values,
+[[nodiscard]] auto checked_gather_compact_from(const R& values,
                                                subset<Domain> selected) {
   using source_type = std::remove_pointer_t<decltype(std::data(values))>;
   using output_type =
@@ -1696,7 +1696,7 @@ template <class T = void, detail::readable_contiguous_range R,
   result.result = {eval_status::ok, selected.count(), 0, 0};
   result.values.resize(selected.count());
 
-  const auto *values_data = std::data(values);
+  const auto* values_data = std::data(values);
   std::size_t rank = 0;
   for_each_index(selected, [&](auto index) {
     result.values[rank++] = values_data[index.value()];
@@ -1707,7 +1707,7 @@ template <class T = void, detail::readable_contiguous_range R,
 template <class T = void, detail::readable_contiguous_range R,
           detail::domain Domain, typename Domain::mask_type Mask>
 [[nodiscard]] constexpr auto
-checked_gather_array_from(const R &values, subset_c<Domain, Mask> = {}) {
+checked_gather_array_from(const R& values, subset_c<Domain, Mask> = {}) {
   using source_type = std::remove_pointer_t<decltype(std::data(values))>;
   using output_type =
       detail::requested_or_inferred_t<T, detail::output_value_t<source_type>>;
@@ -1720,7 +1720,7 @@ checked_gather_array_from(const R &values, subset_c<Domain, Mask> = {}) {
   }
 
   result.result = {eval_status::ok, detail::popcount(Mask), 0, 0};
-  const auto *values_data = std::data(values);
+  const auto* values_data = std::data(values);
   std::size_t rank = 0;
   auto gather_static = [&](auto index_constant) {
     constexpr auto index = decltype(index_constant)::value;
@@ -1731,8 +1731,8 @@ checked_gather_array_from(const R &values, subset_c<Domain, Mask> = {}) {
 }
 
 template <detail::lvalue_contiguous_range R, detail::domain Domain, class Fn>
-constexpr auto checked_transform_selected(R &out, subset<Domain> selected,
-                                          Fn &&fn) -> eval_result {
+constexpr auto checked_transform_selected(R& out, subset<Domain> selected,
+                                          Fn&& fn) -> eval_result {
   if (!selected.in_range()) {
     return {eval_status::mask_out_of_range, selected.count(), 0, 0};
   }
@@ -1750,8 +1750,8 @@ constexpr auto checked_transform_selected(R &out, subset<Domain> selected,
 
 template <detail::lvalue_contiguous_range R, detail::domain Domain,
           typename Domain::mask_type Mask, class Fn>
-constexpr auto checked_transform_selected(R &out, subset_c<Domain, Mask>,
-                                          Fn &&fn) -> eval_result {
+constexpr auto checked_transform_selected(R& out, subset_c<Domain, Mask>,
+                                          Fn&& fn) -> eval_result {
   if (std::size(out) < Domain::size) {
     return {eval_status::output_too_small, detail::popcount(Mask), 0,
             Domain::size};
@@ -1767,7 +1767,7 @@ constexpr auto checked_transform_selected(R &out, subset_c<Domain, Mask>,
 }
 
 template <class T = void, detail::expression Expr>
-[[nodiscard]] auto unchecked_sum(const Expr &expr) {
+[[nodiscard]] auto unchecked_sum(const Expr& expr) {
   static_assert(
       Expr::has_sequence,
       "masked::unchecked_sum requires an expression containing select()");
@@ -1775,7 +1775,7 @@ template <class T = void, detail::expression Expr>
       detail::requested_or_inferred_t<T, typename Expr::value_type>;
   output_type total{};
 
-  auto accumulate = [&](auto, auto &&value) {
+  auto accumulate = [&](auto, auto&& value) {
     total =
         static_cast<output_type>(total + std::forward<decltype(value)>(value));
   };
@@ -1784,7 +1784,7 @@ template <class T = void, detail::expression Expr>
 }
 
 template <class T = void, detail::expression Expr>
-[[nodiscard]] auto checked_sum(const Expr &expr) {
+[[nodiscard]] auto checked_sum(const Expr& expr) {
   static_assert(Expr::has_sequence,
                 "masked::checked_sum requires an expression containing "
                 "select()");
@@ -1800,14 +1800,14 @@ template <class T = void, detail::expression Expr>
 
 template <class T = void, class Lhs, class Rhs>
 requires((detail::expression<Lhs> || detail::expression<Rhs>))
-    [[nodiscard]] auto checked_dot(Lhs &&lhs, Rhs &&rhs) {
+    [[nodiscard]] auto checked_dot(Lhs&& lhs, Rhs&& rhs) {
   auto expr = std::forward<Lhs>(lhs) * std::forward<Rhs>(rhs);
   return checked_sum<T>(expr);
 }
 
 template <class T = void, class Lhs, class Rhs>
 requires((detail::expression<Lhs> || detail::expression<Rhs>))
-    [[nodiscard]] auto unchecked_dot(Lhs &&lhs, Rhs &&rhs) {
+    [[nodiscard]] auto unchecked_dot(Lhs&& lhs, Rhs&& rhs) {
   auto expr = std::forward<Lhs>(lhs) * std::forward<Rhs>(rhs);
   return unchecked_sum<T>(expr);
 }

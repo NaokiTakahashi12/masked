@@ -1,0 +1,10 @@
+# There is no single STL-wide official .clang-format.
+# Use LLVM/libc++'s published baseline as the neutral default, and keep only the
+# small adjustment that matches common standard-library implementation practice
+# in this repository.
+---
+Language: Cpp
+BasedOnStyle: LLVM
+PointerAlignment: Left
+Standard: Latest
+...
