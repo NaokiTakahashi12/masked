@@ -37,6 +37,10 @@ auto status_name(masked::eval_status status) -> std::string_view {
     return "source_too_small";
   case masked::eval_status::output_too_small:
     return "output_too_small";
+  case masked::eval_status::compact_input_size_mismatch:
+    return "compact_input_size_mismatch";
+  case masked::eval_status::empty_selection:
+    return "empty_selection";
   case masked::eval_status::no_selected_sequence:
     return "no_selected_sequence";
   }
@@ -47,7 +51,7 @@ void runtime_mask_demo() {
   std::array<double, joint_domain::size> position{0.0, 10.0, 20.0, 30.0, 40.0};
   std::array<double, joint_domain::size> velocity{1.0, 2.0, 3.0, 4.0, 5.0};
   std::array<double, 3> out{};
-  const auto active = masked::subset<joint_domain>::from_bits(0b10110);
+  const auto active = masked::subset<joint_domain>::from_bits_asserted(0b10110);
 
   const auto expr =
       masked::select(position, active) * masked::select(velocity, active) + 2.0;
@@ -61,9 +65,10 @@ void runtime_mask_demo() {
 
 void scalar_and_materialize_demo() {
   std::vector<int> values{1, 2, 3, 4, 5, 6};
-  const auto active = masked::subset<actuator_domain>::from_bits(0b101011);
+  const auto active =
+      masked::subset<actuator_domain>::from_bits_asserted(0b101011);
 
-  const auto out = masked::materialize(
+  const auto out = masked::unchecked_materialize(
       -(masked::select(values, active) + masked::scalar(10)));
 
   std::cout << "scalar broadcast and materialize\n";
@@ -74,7 +79,7 @@ void scalar_and_materialize_demo() {
 void compile_time_mask_demo() {
   std::array<int, joint_domain::size> values{1, 2, 3, 4, 5};
 
-  const auto out = masked::eval_array<double>(
+  const auto out = masked::unchecked_eval_array<double>(
       masked::select<joint_domain, 0b10101>(values) * 2.5);
 
   std::cout << "compile-time mask to std::array\n";
@@ -88,7 +93,7 @@ void validation_demo() {
   std::array<int, 1> out{};
   using invalid_domain =
       masked::index_domain<struct invalid_tag, 3, std::uint8_t>;
-  const auto invalid = masked::subset<invalid_domain>::from_bits(1U << 4);
+  const auto invalid = masked::subset<invalid_domain>::unchecked(1U << 4);
 
   const auto result =
       masked::checked_eval_to(out, masked::select(values, invalid));

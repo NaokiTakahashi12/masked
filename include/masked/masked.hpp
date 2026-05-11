@@ -26,16 +26,16 @@ enum class eval_status {
   mask_mismatch,
   source_too_small,
   output_too_small,
+  compact_input_size_mismatch,
+  empty_selection,
   no_selected_sequence,
 };
 
 struct eval_result {
   eval_status status{eval_status::ok};
-  // Number of selected elements the expression would produce.
   std::size_t selected_size{0};
-  // Minimum source span required by the selected domain. Non-zero only when
-  // source_too_small is reported.
   std::size_t required_source_size{0};
+  std::size_t required_output_size{0};
 
   [[nodiscard]] constexpr auto operator==(eval_status expected) const noexcept
       -> bool {
@@ -82,6 +82,12 @@ concept mask_integer =
 
 template <class T>
 concept lvalue_contiguous_range = requires(T &values) {
+  std::data(values);
+  std::size(values);
+};
+
+template <class T>
+concept readable_contiguous_range = requires(const T &values) {
   std::data(values);
   std::size(values);
 };
@@ -296,25 +302,39 @@ public:
   using mask_type = typename Domain::mask_type;
 
   constexpr subset() noexcept = default;
-  constexpr explicit subset(mask_type mask) noexcept : mask_(mask) {}
 
   [[nodiscard]] static constexpr auto none() noexcept -> subset {
-    return subset(mask_type{0});
+    return subset(mask_type{0}, unchecked_tag{});
   }
 
   [[nodiscard]] static constexpr auto all() noexcept -> subset {
-    return subset(Domain::full_mask());
+    return subset(Domain::full_mask(), unchecked_tag{});
   }
 
   [[nodiscard]] static constexpr auto from_bits(mask_type mask) noexcept
+      -> std::optional<subset> {
+    if (!Domain::valid_mask(mask)) {
+      return std::nullopt;
+    }
+    return subset(mask, unchecked_tag{});
+  }
+
+  [[nodiscard]] static constexpr auto
+  from_bits_asserted(mask_type mask) noexcept -> subset {
+    assert(Domain::valid_mask(mask));
+    return subset(mask, unchecked_tag{});
+  }
+
+  [[nodiscard]] static constexpr auto unchecked(mask_type mask) noexcept
       -> subset {
-    return subset(mask);
+    return subset(mask, unchecked_tag{});
   }
 
   [[nodiscard]] static constexpr auto singleton(std::size_t index) noexcept
       -> subset {
     assert(Domain::valid_index(index));
-    return subset(static_cast<mask_type>(mask_type{1} << index));
+    return subset(static_cast<mask_type>(mask_type{1} << index),
+                  unchecked_tag{});
   }
 
   [[nodiscard]] static constexpr auto
@@ -330,7 +350,7 @@ public:
       mask = static_cast<mask_type>(
           mask | static_cast<mask_type>(mask_type{1} << index));
     }
-    return subset(mask);
+    return subset(mask, unchecked_tag{});
   }
 
   [[nodiscard]] static constexpr auto
@@ -341,7 +361,7 @@ public:
       mask = static_cast<mask_type>(
           mask | static_cast<mask_type>(mask_type{1} << index.value()));
     }
-    return subset(mask);
+    return subset(mask, unchecked_tag{});
   }
 
   [[nodiscard]] constexpr auto raw() const noexcept -> mask_type {
@@ -388,24 +408,28 @@ public:
 
   [[nodiscard]] friend constexpr auto operator|(subset lhs, subset rhs) noexcept
       -> subset {
-    return subset(static_cast<mask_type>(lhs.mask_ | rhs.mask_));
+    return subset(static_cast<mask_type>(lhs.mask_ | rhs.mask_),
+                  unchecked_tag{});
   }
 
   [[nodiscard]] friend constexpr auto operator&(subset lhs, subset rhs) noexcept
       -> subset {
-    return subset(static_cast<mask_type>(lhs.mask_ & rhs.mask_));
+    return subset(static_cast<mask_type>(lhs.mask_ & rhs.mask_),
+                  unchecked_tag{});
   }
 
   [[nodiscard]] friend constexpr auto operator^(subset lhs, subset rhs) noexcept
       -> subset {
-    return subset(static_cast<mask_type>(lhs.mask_ ^ rhs.mask_));
+    return subset(static_cast<mask_type>(lhs.mask_ ^ rhs.mask_),
+                  unchecked_tag{});
   }
 
   [[nodiscard]] friend constexpr auto difference(subset lhs,
                                                  subset rhs) noexcept
       -> subset {
     return subset(
-        static_cast<mask_type>(lhs.mask_ & static_cast<mask_type>(~rhs.mask_)));
+        static_cast<mask_type>(lhs.mask_ & static_cast<mask_type>(~rhs.mask_)),
+        unchecked_tag{});
   }
 
   [[nodiscard]] friend constexpr auto intersects(subset lhs,
@@ -421,10 +445,16 @@ public:
 
   [[nodiscard]] constexpr auto complement() const noexcept -> subset {
     return subset(static_cast<mask_type>(Domain::full_mask() &
-                                         static_cast<mask_type>(~mask_)));
+                                         static_cast<mask_type>(~mask_)),
+                  unchecked_tag{});
   }
 
 private:
+  struct unchecked_tag {};
+
+  constexpr explicit subset(mask_type mask, unchecked_tag) noexcept
+      : mask_(mask) {}
+
   mask_type mask_{0};
 };
 
@@ -442,7 +472,7 @@ struct subset_c {
   static constexpr bool is_full = value == Domain::full_mask();
 
   [[nodiscard]] static constexpr auto as_subset() noexcept -> subset<Domain> {
-    return subset<Domain>(value);
+    return subset<Domain>::unchecked(value);
   }
 
   [[nodiscard]] constexpr operator subset<Domain>() const noexcept {
@@ -530,6 +560,63 @@ template <detail::domain Domain, typename Domain::mask_type Superset,
   return (Superset & SubsetValue) == SubsetValue;
 }
 
+namespace detail {
+
+template <domain Domain, typename Domain::mask_type Mask, std::size_t Index,
+          class Fn>
+constexpr void for_each_static_index_impl(Fn &&fn) {
+  if constexpr (Index < Domain::size) {
+    constexpr auto bit = static_cast<typename Domain::mask_type>(
+        typename Domain::mask_type{1} << Index);
+    if constexpr ((Mask & bit) != typename Domain::mask_type{0}) {
+      std::forward<Fn>(fn)(std::integral_constant<std::size_t, Index>{});
+    }
+    for_each_static_index_impl<Domain, Mask, Index + 1>(std::forward<Fn>(fn));
+  }
+}
+
+template <domain Domain, typename Domain::mask_type Mask, class Fn>
+constexpr void for_each_static_index(Fn &&fn) {
+  for_each_static_index_impl<Domain, Mask, 0>(std::forward<Fn>(fn));
+}
+
+} // namespace detail
+
+template <detail::domain Domain, class Fn>
+constexpr void for_each_index(subset<Domain> selected, Fn &&fn) {
+  assert(selected.in_range());
+  if (selected.is_full()) {
+    for (std::size_t index = 0; index < Domain::size; ++index) {
+      std::forward<Fn>(fn)(typed_index<Domain>::unchecked(index));
+    }
+    return;
+  }
+
+  auto cursor = detail::mask_cursor<typename Domain::mask_type>(selected.raw());
+  while (cursor.has_next()) {
+    std::forward<Fn>(fn)(typed_index<Domain>::unchecked(cursor.next()));
+  }
+}
+
+template <detail::domain Domain, typename Domain::mask_type Mask, class Fn>
+constexpr void for_each_index(subset_c<Domain, Mask>, Fn &&fn) {
+  detail::for_each_static_index<Domain, Mask>(std::forward<Fn>(fn));
+}
+
+template <detail::domain Domain, class Pred>
+[[nodiscard]] constexpr auto make_subset_if(Pred &&pred) -> subset<Domain> {
+  typename Domain::mask_type mask = 0;
+  for (std::size_t index = 0; index < Domain::size; ++index) {
+    const auto typed = typed_index<Domain>::unchecked(index);
+    if (std::forward<Pred>(pred)(typed)) {
+      mask = static_cast<typename Domain::mask_type>(
+          mask | static_cast<typename Domain::mask_type>(
+                     typename Domain::mask_type{1} << index));
+    }
+  }
+  return subset<Domain>::unchecked(mask);
+}
+
 template <class T, detail::domain Domain> class subset_view {
 public:
   using element_type = T;
@@ -557,22 +644,18 @@ public:
     return selected_.raw();
   }
 
-  [[nodiscard]] constexpr auto source_size() const noexcept -> std::size_t {
-    return values_.size();
-  }
-
   [[nodiscard]] constexpr auto size() const noexcept -> std::size_t {
     return selected_.count();
   }
 
   [[nodiscard]] constexpr auto validate() const noexcept -> eval_result {
     if (!selected_.in_range()) {
-      return {eval_status::mask_out_of_range, size(), 0};
+      return {eval_status::mask_out_of_range, size(), 0, 0};
     }
     if (values_.size() < Domain::size) {
-      return {eval_status::source_too_small, size(), Domain::size};
+      return {eval_status::source_too_small, size(), Domain::size, 0};
     }
-    return {eval_status::ok, size(), 0};
+    return {eval_status::ok, size(), 0, 0};
   }
 
   [[nodiscard]] constexpr auto make_state() const noexcept -> state_type {
@@ -614,8 +697,6 @@ public:
   static constexpr bool has_static_mask = true;
   static constexpr mask_type static_mask = Mask;
   static constexpr std::size_t static_extent = detail::popcount(static_mask);
-  static constexpr bool is_empty = static_mask == mask_type{0};
-  static constexpr bool is_full = static_mask == Domain::full_mask();
 
   static_assert(Domain::valid_mask(static_mask),
                 "masked::select<Domain, Mask> selects an index outside its "
@@ -630,15 +711,11 @@ public:
       : values_(values) {}
 
   [[nodiscard]] static constexpr auto selected() noexcept -> subset<Domain> {
-    return subset<Domain>(static_mask);
+    return subset<Domain>::unchecked(static_mask);
   }
 
   [[nodiscard]] static constexpr auto mask_value() noexcept -> mask_type {
     return static_mask;
-  }
-
-  [[nodiscard]] constexpr auto source_size() const noexcept -> std::size_t {
-    return values_.size();
   }
 
   [[nodiscard]] static constexpr auto size() noexcept -> std::size_t {
@@ -647,9 +724,9 @@ public:
 
   [[nodiscard]] constexpr auto validate() const noexcept -> eval_result {
     if (values_.size() < Domain::size) {
-      return {eval_status::source_too_small, static_extent, Domain::size};
+      return {eval_status::source_too_small, static_extent, Domain::size, 0};
     }
-    return {eval_status::ok, static_extent, 0};
+    return {eval_status::ok, static_extent, 0, 0};
   }
 
   [[nodiscard]] constexpr auto make_state() const noexcept -> state_type {
@@ -700,7 +777,7 @@ public:
   }
 
   [[nodiscard]] static constexpr auto validate() noexcept -> eval_result {
-    return {eval_status::ok, 0, 0};
+    return {eval_status::ok, 0, 0, 0};
   }
 
   [[nodiscard]] static constexpr auto make_state() noexcept -> state_type {
@@ -733,10 +810,6 @@ struct is_expression<static_subset_view<T, Domain, Mask>> : std::true_type {};
 
 template <class T> struct is_expression<scalar_expr<T>> : std::true_type {};
 
-template <expression Expr>
-inline constexpr bool has_static_sequence_mask_v =
-    Expr::has_sequence &&Expr::has_static_mask;
-
 template <class Lhs, class Rhs> struct common_domain {
   static_assert(expression<Lhs> && expression<Rhs>);
 
@@ -752,6 +825,21 @@ template <class Lhs, class Rhs> struct common_domain {
 
 template <class Lhs, class Rhs>
 using common_domain_t = typename common_domain<Lhs, Rhs>::type;
+
+template <class Lhs, class Rhs> consteval auto static_masks_match() -> bool {
+  if constexpr (Lhs::has_sequence && Rhs::has_sequence &&
+                Lhs::has_static_mask && Rhs::has_static_mask) {
+    return Lhs::static_mask == Rhs::static_mask;
+  } else {
+    return false;
+  }
+}
+
+template <class Lhs, class Rhs>
+inline constexpr bool combined_has_static_mask_v =
+    (Lhs::has_sequence && !Rhs::has_sequence && Lhs::has_static_mask) ||
+    (Rhs::has_sequence && !Lhs::has_sequence && Rhs::has_static_mask) ||
+    static_masks_match<Lhs, Rhs>();
 
 template <class Lhs, class Rhs>
 consteval auto combined_static_extent() -> std::size_t {
@@ -771,21 +859,6 @@ consteval auto combined_static_extent() -> std::size_t {
     return dynamic_extent;
   }
 }
-
-template <class Lhs, class Rhs> consteval auto static_masks_match() -> bool {
-  if constexpr (Lhs::has_sequence && Rhs::has_sequence &&
-                Lhs::has_static_mask && Rhs::has_static_mask) {
-    return Lhs::static_mask == Rhs::static_mask;
-  } else {
-    return false;
-  }
-}
-
-template <class Lhs, class Rhs>
-inline constexpr bool combined_has_static_mask_v =
-    (Lhs::has_sequence && !Rhs::has_sequence && Lhs::has_static_mask) ||
-    (Rhs::has_sequence && !Lhs::has_sequence && Rhs::has_static_mask) ||
-    static_masks_match<Lhs, Rhs>();
 
 template <class Lhs, class Rhs>
 consteval auto combined_static_mask()
@@ -873,7 +946,6 @@ public:
       detail::combined_has_static_mask_v<Lhs, Rhs>;
   static constexpr std::size_t static_extent =
       detail::combined_static_extent<Lhs, Rhs>();
-
   static constexpr mask_type static_mask = [] {
     if constexpr (has_static_mask) {
       return static_cast<mask_type>(detail::combined_static_mask<Lhs, Rhs>());
@@ -922,13 +994,13 @@ public:
     }
     if constexpr (Lhs::has_sequence && Rhs::has_sequence) {
       if (lhs_.mask_value() != rhs_.mask_value()) {
-        return {eval_status::mask_mismatch, size(), 0};
+        return {eval_status::mask_mismatch, size(), 0, 0};
       }
     }
     if constexpr (!has_sequence) {
-      return {eval_status::no_selected_sequence, 0, 0};
+      return {eval_status::no_selected_sequence, 0, 0, 0};
     } else {
-      return {eval_status::ok, size(), 0};
+      return {eval_status::ok, size(), 0, 0};
     }
   }
 
@@ -1035,6 +1107,147 @@ private:
   Expr expr_;
 };
 
+template <detail::expression Expr> class restricted_expr {
+public:
+  using expr_type = Expr;
+  using domain_type = typename Expr::domain_type;
+  using mask_type = typename Expr::mask_type;
+  using eval_type = typename Expr::eval_type;
+  using value_type = typename Expr::value_type;
+  static constexpr bool has_sequence = true;
+  static constexpr bool has_static_mask = false;
+  static constexpr std::size_t static_extent = dynamic_extent;
+
+  struct state_type {
+    detail::mask_cursor<mask_type> cursor;
+    std::size_t index{0};
+  };
+
+  constexpr restricted_expr(Expr expr, subset<domain_type> selected) noexcept(
+      std::is_nothrow_move_constructible_v<Expr>)
+      : expr_(std::move(expr)), selected_(selected) {}
+
+  [[nodiscard]] constexpr auto size() const noexcept -> std::size_t {
+    return selected_.count();
+  }
+
+  [[nodiscard]] constexpr auto mask_value() const noexcept -> mask_type {
+    return selected_.raw();
+  }
+
+  [[nodiscard]] constexpr auto validate() const noexcept -> eval_result {
+    if (!selected_.in_range()) {
+      return {eval_status::mask_out_of_range, size(), 0, 0};
+    }
+    if (const auto status = expr_.validate(); !status) {
+      return status;
+    }
+    if ((expr_.mask_value() & selected_.raw()) != selected_.raw()) {
+      return {eval_status::mask_mismatch, size(), 0, 0};
+    }
+    return {eval_status::ok, size(), 0, 0};
+  }
+
+  [[nodiscard]] constexpr auto make_state() const noexcept -> state_type {
+    auto state = state_type{detail::mask_cursor<mask_type>(selected_.raw()), 0};
+    if (state.cursor.has_next()) {
+      state.index = state.cursor.next();
+    }
+    return state;
+  }
+
+  [[nodiscard]] constexpr auto value(state_type &state) const noexcept
+      -> eval_type {
+    return expr_.unchecked_value_at(state.index);
+  }
+
+  [[nodiscard]] constexpr auto
+  unchecked_value_at(std::size_t index) const noexcept -> eval_type {
+    assert(selected_.contains(index));
+    return expr_.unchecked_value_at(index);
+  }
+
+  constexpr void advance(state_type &state) const noexcept {
+    state.index = state.cursor.next();
+  }
+
+private:
+  Expr expr_;
+  subset<domain_type> selected_;
+};
+
+template <detail::expression Expr, typename Expr::mask_type Mask>
+class static_restricted_expr {
+public:
+  using expr_type = Expr;
+  using domain_type = typename Expr::domain_type;
+  using mask_type = typename Expr::mask_type;
+  using eval_type = typename Expr::eval_type;
+  using value_type = typename Expr::value_type;
+  static constexpr bool has_sequence = true;
+  static constexpr bool has_static_mask = true;
+  static constexpr mask_type static_mask = Mask;
+  static constexpr std::size_t static_extent = detail::popcount(static_mask);
+
+  static_assert(domain_type::valid_mask(static_mask),
+                "masked::static_restricted_expr mask is outside its domain");
+
+  struct state_type {
+    detail::mask_cursor<mask_type> cursor;
+    std::size_t index{0};
+  };
+
+  constexpr explicit static_restricted_expr(Expr expr) noexcept(
+      std::is_nothrow_move_constructible_v<Expr>)
+      : expr_(std::move(expr)) {}
+
+  [[nodiscard]] static constexpr auto size() noexcept -> std::size_t {
+    return static_extent;
+  }
+
+  [[nodiscard]] static constexpr auto mask_value() noexcept -> mask_type {
+    return static_mask;
+  }
+
+  [[nodiscard]] constexpr auto validate() const noexcept -> eval_result {
+    if (const auto status = expr_.validate(); !status) {
+      return status;
+    }
+    if ((expr_.mask_value() & static_mask) != static_mask) {
+      return {eval_status::mask_mismatch, static_extent, 0, 0};
+    }
+    return {eval_status::ok, static_extent, 0, 0};
+  }
+
+  [[nodiscard]] constexpr auto make_state() const noexcept -> state_type {
+    auto state = state_type{detail::mask_cursor<mask_type>(static_mask), 0};
+    if (state.cursor.has_next()) {
+      state.index = state.cursor.next();
+    }
+    return state;
+  }
+
+  [[nodiscard]] constexpr auto value(state_type &state) const noexcept
+      -> eval_type {
+    return expr_.unchecked_value_at(state.index);
+  }
+
+  [[nodiscard]] constexpr auto
+  unchecked_value_at(std::size_t index) const noexcept -> eval_type {
+    assert(domain_type::valid_index(index));
+    assert((static_mask & static_cast<mask_type>(mask_type{1} << index)) !=
+           mask_type{0});
+    return expr_.unchecked_value_at(index);
+  }
+
+  constexpr void advance(state_type &state) const noexcept {
+    state.index = state.cursor.next();
+  }
+
+private:
+  Expr expr_;
+};
+
 namespace detail {
 
 template <expression Lhs, expression Rhs, class Op>
@@ -1042,6 +1255,12 @@ struct is_expression<binary_expr<Lhs, Rhs, Op>> : std::true_type {};
 
 template <expression Expr, class Op>
 struct is_expression<unary_expr<Expr, Op>> : std::true_type {};
+
+template <expression Expr>
+struct is_expression<restricted_expr<Expr>> : std::true_type {};
+
+template <expression Expr, typename Expr::mask_type Mask>
+struct is_expression<static_restricted_expr<Expr, Mask>> : std::true_type {};
 
 } // namespace detail
 
@@ -1090,6 +1309,24 @@ template <detail::domain Domain, std::size_t Index,
   constexpr auto mask = static_cast<typename Domain::mask_type>(
       typename Domain::mask_type{1} << Index);
   return select<Domain, mask>(values);
+}
+
+template <detail::expression Expr>
+[[nodiscard]] constexpr auto
+restrict_to(Expr &&expr,
+            subset<typename std::remove_cvref_t<Expr>::domain_type> selected) {
+  using expr_type = decltype(detail::as_expr(std::forward<Expr>(expr)));
+  auto expr_value = detail::as_expr(std::forward<Expr>(expr));
+  return restricted_expr<expr_type>(std::move(expr_value), selected);
+}
+
+template <detail::expression Expr, detail::domain Domain,
+          typename Domain::mask_type Mask>
+requires std::same_as<typename std::remove_cvref_t<Expr>::domain_type, Domain>
+[[nodiscard]] constexpr auto restrict_to(Expr &&expr, subset_c<Domain, Mask>) {
+  using expr_type = decltype(detail::as_expr(std::forward<Expr>(expr)));
+  auto expr_value = detail::as_expr(std::forward<Expr>(expr));
+  return static_restricted_expr<expr_type, Mask>(std::move(expr_value));
 }
 
 template <class T> [[nodiscard]] constexpr auto scalar(T value) {
@@ -1147,18 +1384,18 @@ template <detail::expression Expr>
 template <detail::expression Expr>
 [[nodiscard]] constexpr auto selected_size(const Expr &expr) noexcept
     -> std::size_t {
-  static_assert(
-      Expr::has_sequence,
-      "masked::selected_size requires an expression containing select()");
+  static_assert(Expr::has_sequence,
+                "masked::selected_size requires an expression containing "
+                "select()");
   return expr.size();
 }
 
 template <detail::expression Expr>
 [[nodiscard]] constexpr auto selected_mask(const Expr &expr) noexcept ->
     typename Expr::mask_type {
-  static_assert(
-      Expr::has_sequence,
-      "masked::selected_mask requires an expression containing select()");
+  static_assert(Expr::has_sequence,
+                "masked::selected_mask requires an expression containing "
+                "select()");
   return expr.mask_value();
 }
 
@@ -1166,7 +1403,7 @@ template <detail::expression Expr>
 [[nodiscard]] constexpr auto validate(const Expr &expr) noexcept
     -> eval_result {
   if constexpr (!Expr::has_sequence) {
-    return {eval_status::no_selected_sequence, 0, 0};
+    return {eval_status::no_selected_sequence, 0, 0, 0};
   } else {
     return expr.validate();
   }
@@ -1174,92 +1411,65 @@ template <detail::expression Expr>
 
 namespace detail {
 
-template <domain Domain, typename Domain::mask_type Mask, std::size_t Index,
-          class Fn>
-constexpr void for_each_static_index_impl(Fn &&fn) {
-  if constexpr (Index < Domain::size) {
-    constexpr auto bit = static_cast<typename Domain::mask_type>(
-        typename Domain::mask_type{1} << Index);
-    if constexpr ((Mask & bit) != typename Domain::mask_type{0}) {
-      std::forward<Fn>(fn)(std::integral_constant<std::size_t, Index>{});
+template <std::size_t Index>
+[[nodiscard]] constexpr auto
+index_value(std::integral_constant<std::size_t, Index>) noexcept
+    -> std::size_t {
+  return Index;
+}
+
+template <domain Domain>
+[[nodiscard]] constexpr auto index_value(typed_index<Domain> index) noexcept
+    -> std::size_t {
+  return index.value();
+}
+
+template <expression Expr, class Fn>
+constexpr void unchecked_for_each_index_value(const Expr &expr, Fn &&fn) {
+  static_assert(Expr::has_sequence,
+                "masked::unchecked_for_each_index_value requires an "
+                "expression containing select()");
+
+  if constexpr (Expr::has_static_mask) {
+    auto emit = [&](auto index_constant) {
+      constexpr auto index = decltype(index_constant)::value;
+      std::forward<Fn>(fn)(index_constant, expr.unchecked_value_at(index));
+    };
+    for_each_static_index<typename Expr::domain_type, Expr::static_mask>(emit);
+  } else {
+    using domain_type = typename Expr::domain_type;
+    if (expr.mask_value() == domain_type::full_mask()) {
+      for (std::size_t index = 0; index < domain_type::size; ++index) {
+        std::forward<Fn>(fn)(typed_index<domain_type>::unchecked(index),
+                             expr.unchecked_value_at(index));
+      }
+      return;
     }
-    for_each_static_index_impl<Domain, Mask, Index + 1>(std::forward<Fn>(fn));
-  }
-}
 
-template <domain Domain, typename Domain::mask_type Mask, class Fn>
-constexpr void for_each_static_index(Fn &&fn) {
-  for_each_static_index_impl<Domain, Mask, 0>(std::forward<Fn>(fn));
-}
-
-} // namespace detail
-
-struct sparse_evaluator {
-  template <class Out, detail::expression Expr>
-  constexpr auto operator()(Out out, const Expr &expr) const -> Out {
-    static_assert(
-        Expr::has_sequence,
-        "masked::sparse_evaluator requires an expression containing select()");
-    const auto size = expr.size();
     auto state = expr.make_state();
+    auto cursor = mask_cursor<typename Expr::mask_type>(expr.mask_value());
+    const auto size = expr.size();
     for (std::size_t rank = 0; rank < size; ++rank) {
-      *out = expr.value(state);
-      ++out;
+      const auto index = cursor.next();
+      std::forward<Fn>(fn)(typed_index<domain_type>::unchecked(index),
+                           expr.value(state));
       if (rank + 1 < size) {
         expr.advance(state);
       }
     }
-    return out;
   }
-};
+}
 
-struct static_mask_evaluator {
-  template <class Out, detail::expression Expr>
-  constexpr auto operator()(Out out, const Expr &expr) const -> Out {
-    static_assert(Expr::has_sequence && Expr::has_static_mask,
-                  "masked::static_mask_evaluator requires a static mask");
-    auto emit = [&](auto index_constant) {
-      constexpr auto index = decltype(index_constant)::value;
-      *out = expr.unchecked_value_at(index);
-      ++out;
-    };
-    detail::for_each_static_index<typename Expr::domain_type,
-                                  Expr::static_mask>(emit);
-    return out;
-  }
-};
-
-struct full_mask_evaluator {
-  template <class Out, detail::expression Expr>
-  constexpr auto operator()(Out out, const Expr &expr) const -> Out {
-    static_assert(Expr::has_sequence,
-                  "masked::full_mask_evaluator requires an expression "
-                  "containing select()");
-    using domain_type = typename Expr::domain_type;
-    for (std::size_t index = 0; index < domain_type::size; ++index) {
-      *out = expr.unchecked_value_at(index);
-      ++out;
-    }
-    return out;
-  }
-};
-
-// Placeholder name kept intentionally: evaluator selection can be specialized
-// later for dense-but-not-full masks without changing the public API.
-struct dense_evaluator {};
+} // namespace detail
 
 template <class Out, detail::expression Expr>
 constexpr auto unchecked_eval_to(Out out, const Expr &expr) -> Out {
-  if constexpr (Expr::has_static_mask) {
-    return static_mask_evaluator{}(out, expr);
-  } else {
-    if constexpr (!std::same_as<typename Expr::domain_type, void>) {
-      if (expr.mask_value() == Expr::domain_type::full_mask()) {
-        return full_mask_evaluator{}(out, expr);
-      }
-    }
-    return sparse_evaluator{}(out, expr);
-  }
+  auto write = [&](auto, auto &&value) {
+    *out = std::forward<decltype(value)>(value);
+    ++out;
+  };
+  detail::unchecked_for_each_index_value(expr, write);
+  return out;
 }
 
 template <class T, std::size_t Extent, detail::expression Expr>
@@ -1270,7 +1480,8 @@ constexpr auto checked_eval_to(std::span<T, Extent> out, const Expr &expr)
     return validation;
   }
   if (out.size() < validation.selected_size) {
-    return {eval_status::output_too_small, validation.selected_size, 0};
+    return {eval_status::output_too_small, validation.selected_size, 0,
+            validation.selected_size};
   }
   unchecked_eval_to(out.begin(), expr);
   return validation;
@@ -1313,26 +1524,12 @@ template <class T = void, detail::expression Expr>
 }
 
 template <class T = void, detail::expression Expr>
-[[nodiscard]] auto materialize_or_abort(const Expr &expr) {
-  auto result = checked_materialize<T>(expr);
-  if (!result) {
-    std::abort();
-  }
-  return std::move(result.values);
-}
-
-template <class T = void, detail::expression Expr>
-[[nodiscard]] auto materialize(const Expr &expr) {
-  return materialize_or_abort<T>(expr);
-}
-
-template <class T = void, detail::expression Expr>
-[[nodiscard]] constexpr auto eval_array(const Expr &expr) {
-  static_assert(
-      Expr::has_sequence,
-      "masked::eval_array requires an expression containing select()");
+[[nodiscard]] constexpr auto unchecked_eval_array(const Expr &expr) {
+  static_assert(Expr::has_sequence, "masked::unchecked_eval_array requires an "
+                                    "expression containing select()");
   static_assert(Expr::static_extent != dynamic_extent,
-                "masked::eval_array requires compile-time selected length");
+                "masked::unchecked_eval_array requires compile-time selected "
+                "length");
   using output_type =
       detail::requested_or_inferred_t<T, typename Expr::value_type>;
   std::array<output_type, Expr::static_extent> out{};
@@ -1374,40 +1571,19 @@ constexpr auto checked_update_selected(R &out, const Expr &expr, Fn &&fn)
     return validation;
   }
   if (std::size(out) < domain_type::size) {
-    return {eval_status::output_too_small, domain_type::size, 0};
+    return {eval_status::output_too_small, validation.selected_size, 0,
+            domain_type::size};
   }
 
   auto out_span = std::span<element_type>(std::data(out), std::size(out));
 
-  if constexpr (Expr::has_static_mask) {
-    auto update_static = [&](auto index_constant) {
-      constexpr auto index = decltype(index_constant)::value;
-      std::forward<Fn>(fn)(out_span[index], expr.unchecked_value_at(index));
-    };
-    detail::for_each_static_index<domain_type, Expr::static_mask>(
-        update_static);
-    return validation;
-  } else {
-    if (expr.mask_value() == domain_type::full_mask()) {
-      for (std::size_t index = 0; index < domain_type::size; ++index) {
-        std::forward<Fn>(fn)(out_span[index], expr.unchecked_value_at(index));
-      }
-      return validation;
-    }
+  auto update = [&](auto index_token, auto &&value) {
+    const auto index = detail::index_value(index_token);
+    fn(out_span[index], std::forward<decltype(value)>(value));
+  };
 
-    auto state = expr.make_state();
-    auto cursor =
-        detail::mask_cursor<typename Expr::mask_type>(expr.mask_value());
-    const auto size = expr.size();
-    for (std::size_t rank = 0; rank < size; ++rank) {
-      const auto index = cursor.next();
-      std::forward<Fn>(fn)(out_span[index], expr.value(state));
-      if (rank + 1 < size) {
-        expr.advance(state);
-      }
-    }
-    return validation;
-  }
+  detail::unchecked_for_each_index_value(expr, update);
+  return validation;
 }
 
 template <detail::lvalue_contiguous_range R, detail::expression Expr>
@@ -1447,71 +1623,129 @@ template <class T = void, detail::expression Expr>
   if (!result) {
     return result;
   }
-  result.result = checked_scatter_to(result.values, expr);
-  return result;
-}
 
-template <class T = void, detail::expression Expr>
-[[nodiscard]] constexpr auto domain_array_or_abort(
-    const Expr &expr,
-    detail::requested_or_inferred_t<T, typename Expr::value_type> fill = {}) {
-  auto result = checked_domain_array<T>(expr, fill);
-  if (!result) {
-    std::abort();
-  }
-  return result.values;
+  auto write = [&](auto index_token, auto &&value) {
+    result.values[detail::index_value(index_token)] =
+        std::forward<decltype(value)>(value);
+  };
+  detail::unchecked_for_each_index_value(expr, write);
+  return result;
 }
 
 template <detail::lvalue_contiguous_range R, detail::domain Domain, class Value>
 constexpr auto checked_fill_selected(R &out, subset<Domain> selected,
                                      Value &&value) -> eval_result {
   if (!selected.in_range()) {
-    return {eval_status::mask_out_of_range, selected.count(), 0};
+    return {eval_status::mask_out_of_range, selected.count(), 0, 0};
   }
   if (std::size(out) < Domain::size) {
-    return {eval_status::output_too_small, Domain::size, 0};
+    return {eval_status::output_too_small, selected.count(), 0, Domain::size};
   }
 
   using element_type = detail::range_element_t<R>;
   auto out_span = std::span<element_type>(std::data(out), std::size(out));
-  auto cursor = detail::mask_cursor<typename Domain::mask_type>(selected.raw());
-  while (cursor.has_next()) {
-    out_span[cursor.next()] = value;
-  }
-  return {eval_status::ok, selected.count(), 0};
+  for_each_index(selected,
+                 [&](auto index) { out_span[index.value()] = value; });
+  return {eval_status::ok, selected.count(), 0, 0};
 }
 
-template <detail::domain Domain, class Fn>
-constexpr void for_each_index(subset<Domain> selected, Fn &&fn) {
-  assert(selected.in_range());
-  auto cursor = detail::mask_cursor<typename Domain::mask_type>(selected.raw());
-  while (cursor.has_next()) {
-    std::forward<Fn>(fn)(cursor.next());
+template <detail::lvalue_contiguous_range Out,
+          detail::readable_contiguous_range Compact, detail::domain Domain>
+constexpr auto checked_scatter_compact_to(Out &out, const Compact &compact,
+                                          subset<Domain> selected)
+    -> eval_result {
+  if (!selected.in_range()) {
+    return {eval_status::mask_out_of_range, selected.count(), 0, 0};
   }
+  if (std::size(out) < Domain::size) {
+    return {eval_status::output_too_small, selected.count(), 0, Domain::size};
+  }
+  if (std::size(compact) < selected.count()) {
+    return {eval_status::compact_input_size_mismatch, selected.count(), 0, 0};
+  }
+
+  using out_element_type = detail::range_element_t<Out>;
+  auto out_span = std::span<out_element_type>(std::data(out), std::size(out));
+  const auto *compact_data = std::data(compact);
+
+  std::size_t rank = 0;
+  for_each_index(selected, [&](auto index) {
+    out_span[index.value()] = compact_data[rank++];
+  });
+  return {eval_status::ok, selected.count(), 0, 0};
 }
 
-template <detail::domain Domain, typename Domain::mask_type Mask, class Fn>
-constexpr void for_each_index(subset_c<Domain, Mask>, Fn &&fn) {
-  detail::for_each_static_index<Domain, Mask>(std::forward<Fn>(fn));
+template <class T = void, detail::readable_contiguous_range R,
+          detail::domain Domain>
+[[nodiscard]] auto checked_gather_compact_from(const R &values,
+                                               subset<Domain> selected) {
+  using source_type = std::remove_pointer_t<decltype(std::data(values))>;
+  using output_type =
+      detail::requested_or_inferred_t<T, detail::output_value_t<source_type>>;
+
+  if (!selected.in_range()) {
+    return materialize_result<output_type>{
+        {eval_status::mask_out_of_range, selected.count(), 0, 0}, {}};
+  }
+  if (std::size(values) < Domain::size) {
+    return materialize_result<output_type>{
+        {eval_status::source_too_small, selected.count(), Domain::size, 0}, {}};
+  }
+
+  materialize_result<output_type> result{};
+  result.result = {eval_status::ok, selected.count(), 0, 0};
+  result.values.resize(selected.count());
+
+  const auto *values_data = std::data(values);
+  std::size_t rank = 0;
+  for_each_index(selected, [&](auto index) {
+    result.values[rank++] = values_data[index.value()];
+  });
+  return result;
+}
+
+template <class T = void, detail::readable_contiguous_range R,
+          detail::domain Domain, typename Domain::mask_type Mask>
+[[nodiscard]] constexpr auto
+checked_gather_array_from(const R &values, subset_c<Domain, Mask> = {}) {
+  using source_type = std::remove_pointer_t<decltype(std::data(values))>;
+  using output_type =
+      detail::requested_or_inferred_t<T, detail::output_value_t<source_type>>;
+
+  array_result<output_type, detail::popcount(Mask)> result{};
+  if (std::size(values) < Domain::size) {
+    result.result = {eval_status::source_too_small, detail::popcount(Mask),
+                     Domain::size, 0};
+    return result;
+  }
+
+  result.result = {eval_status::ok, detail::popcount(Mask), 0, 0};
+  const auto *values_data = std::data(values);
+  std::size_t rank = 0;
+  auto gather_static = [&](auto index_constant) {
+    constexpr auto index = decltype(index_constant)::value;
+    result.values[rank++] = values_data[index];
+  };
+  detail::for_each_static_index<Domain, Mask>(gather_static);
+  return result;
 }
 
 template <detail::lvalue_contiguous_range R, detail::domain Domain, class Fn>
 constexpr auto checked_transform_selected(R &out, subset<Domain> selected,
                                           Fn &&fn) -> eval_result {
   if (!selected.in_range()) {
-    return {eval_status::mask_out_of_range, selected.count(), 0};
+    return {eval_status::mask_out_of_range, selected.count(), 0, 0};
   }
   if (std::size(out) < Domain::size) {
-    return {eval_status::output_too_small, Domain::size, 0};
+    return {eval_status::output_too_small, selected.count(), 0, Domain::size};
   }
   using element_type = detail::range_element_t<R>;
   auto out_span = std::span<element_type>(std::data(out), std::size(out));
-  auto cursor = detail::mask_cursor<typename Domain::mask_type>(selected.raw());
-  while (cursor.has_next()) {
-    const auto index = cursor.next();
-    out_span[index] = std::forward<Fn>(fn)(index, out_span[index]);
-  }
-  return {eval_status::ok, selected.count(), 0};
+  for_each_index(selected, [&](auto index) {
+    out_span[index.value()] =
+        std::forward<Fn>(fn)(index, out_span[index.value()]);
+  });
+  return {eval_status::ok, selected.count(), 0, 0};
 }
 
 template <detail::lvalue_contiguous_range R, detail::domain Domain,
@@ -1519,7 +1753,8 @@ template <detail::lvalue_contiguous_range R, detail::domain Domain,
 constexpr auto checked_transform_selected(R &out, subset_c<Domain, Mask>,
                                           Fn &&fn) -> eval_result {
   if (std::size(out) < Domain::size) {
-    return {eval_status::output_too_small, Domain::size, 0};
+    return {eval_status::output_too_small, detail::popcount(Mask), 0,
+            Domain::size};
   }
   using element_type = detail::range_element_t<R>;
   auto out_span = std::span<element_type>(std::data(out), std::size(out));
@@ -1528,7 +1763,7 @@ constexpr auto checked_transform_selected(R &out, subset_c<Domain, Mask>,
     out_span[index] = std::forward<Fn>(fn)(index_constant, out_span[index]);
   };
   detail::for_each_static_index<Domain, Mask>(transform_static);
-  return {eval_status::ok, detail::popcount(Mask), 0};
+  return {eval_status::ok, detail::popcount(Mask), 0, 0};
 }
 
 template <class T = void, detail::expression Expr>
@@ -1540,33 +1775,12 @@ template <class T = void, detail::expression Expr>
       detail::requested_or_inferred_t<T, typename Expr::value_type>;
   output_type total{};
 
-  if constexpr (Expr::has_static_mask) {
-    auto accumulate_static = [&](auto index_constant) {
-      constexpr auto index = decltype(index_constant)::value;
-      total = static_cast<output_type>(total + expr.unchecked_value_at(index));
-    };
-    detail::for_each_static_index<typename Expr::domain_type,
-                                  Expr::static_mask>(accumulate_static);
-    return total;
-  } else {
-    if (expr.mask_value() == Expr::domain_type::full_mask()) {
-      for (std::size_t index = 0; index < Expr::domain_type::size; ++index) {
-        total =
-            static_cast<output_type>(total + expr.unchecked_value_at(index));
-      }
-      return total;
-    }
-
-    auto state = expr.make_state();
-    const auto size = expr.size();
-    for (std::size_t rank = 0; rank < size; ++rank) {
-      total = static_cast<output_type>(total + expr.value(state));
-      if (rank + 1 < size) {
-        expr.advance(state);
-      }
-    }
-    return total;
-  }
+  auto accumulate = [&](auto, auto &&value) {
+    total =
+        static_cast<output_type>(total + std::forward<decltype(value)>(value));
+  };
+  detail::unchecked_for_each_index_value(expr, accumulate);
+  return total;
 }
 
 template <class T = void, detail::expression Expr>

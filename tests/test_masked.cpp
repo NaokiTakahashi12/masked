@@ -21,7 +21,7 @@ TEST(MaskedTest, RuntimeMasksEvaluateByOriginalIndex) {
   std::array<double, joint_domain::size> position{0.0, 10.0, 20.0, 30.0, 40.0};
   std::array<double, joint_domain::size> velocity{1.0, 2.0, 3.0, 4.0, 5.0};
   std::array<double, 3> out{};
-  const auto active = masked::subset<joint_domain>::from_bits(0b10110);
+  const auto active = masked::subset<joint_domain>::from_bits_asserted(0b10110);
 
   const auto expr =
       masked::select(position, active) * masked::select(velocity, active);
@@ -38,7 +38,7 @@ TEST(MaskedTest, SupportsScalarBroadcastAndUnaryMinus) {
   std::array<int, joint_domain::size> a{1, 2, 3, 4, 5};
   std::array<int, joint_domain::size> b{10, 20, 30, 40, 50};
   std::array<int, 3> out{};
-  const auto active = masked::subset<joint_domain>::from_bits(0b10101);
+  const auto active = masked::subset<joint_domain>::from_bits_asserted(0b10101);
 
   const auto expr =
       -(masked::select(a, active) + 2) + masked::select(b, active) / 10;
@@ -65,7 +65,7 @@ TEST(MaskedTest, EmptyMaskWritesNoElements) {
 TEST(MaskedTest, CheckedPathDetectsMaskOutsideDomainRange) {
   std::array<int, short_joint_domain::size> a{1, 2, 3, 4};
   std::array<int, 1> out{};
-  const auto invalid = masked::subset<short_joint_domain>::from_bits(1U << 4);
+  const auto invalid = masked::subset<short_joint_domain>::unchecked(1U << 4);
 
   const auto expr = masked::select(a, invalid);
   const auto result = masked::checked_eval_to(out, expr);
@@ -81,8 +81,12 @@ TEST(MaskedTest, CheckedPathDetectsMaskMismatch) {
   std::array<int, 3> out{};
 
   const auto expr =
-      masked::select(a, masked::subset<short_joint_domain>::from_bits(0b0111)) +
-      masked::select(b, masked::subset<short_joint_domain>::from_bits(0b0011));
+      masked::select(a,
+                     masked::subset<short_joint_domain>::from_bits_asserted(
+                         0b0111)) +
+      masked::select(b,
+                     masked::subset<short_joint_domain>::from_bits_asserted(
+                         0b0011));
   const auto result = masked::checked_eval_to(out, expr);
 
   EXPECT_EQ(result.status, masked::eval_status::mask_mismatch);
@@ -93,7 +97,9 @@ TEST(MaskedTest, CheckedPathDetectsOutputCapacity) {
   std::array<int, 2> out{};
 
   const auto expr =
-      masked::select(a, masked::subset<short_joint_domain>::from_bits(0b111));
+      masked::select(a,
+                     masked::subset<short_joint_domain>::from_bits_asserted(
+                         0b111));
   const auto result = masked::checked_eval_to(out, expr);
 
   EXPECT_EQ(result.status, masked::eval_status::output_too_small);
@@ -122,10 +128,10 @@ TEST(MaskedTest, MakeIndexReturnsOptionalForCheckedConstruction) {
 
 TEST(MaskedTest, MaterializeCreatesIndependentStorage) {
   std::vector<double> values{1.0, 2.0, 3.0, 4.0, 5.0};
-  const auto selected = masked::subset<joint_domain>::from_bits(0b10101);
+  const auto selected = masked::subset<joint_domain>::from_bits_asserted(0b10101);
 
   auto materialized =
-      masked::materialize(masked::select(values, selected) + 0.5);
+      masked::unchecked_materialize(masked::select(values, selected) + 0.5);
   values[0] = 100.0;
   values[2] = 200.0;
 
@@ -137,7 +143,7 @@ TEST(MaskedTest, MaterializeCreatesIndependentStorage) {
 
 TEST(MaskedTest, CheckedMaterializeDetectsMaskOutsideDomainRange) {
   std::array<int, short_joint_domain::size> values{1, 2, 3, 4};
-  const auto invalid = masked::subset<short_joint_domain>::from_bits(1U << 4);
+  const auto invalid = masked::subset<short_joint_domain>::unchecked(1U << 4);
 
   const auto result =
       masked::checked_materialize(masked::select(values, invalid));
@@ -151,8 +157,12 @@ TEST(MaskedTest, CheckedMaterializeDetectsMaskMismatch) {
   std::array<int, short_joint_domain::size> b{10, 20, 30, 40};
 
   const auto result = masked::checked_materialize(
-      masked::select(a, masked::subset<short_joint_domain>::from_bits(0b0111)) +
-      masked::select(b, masked::subset<short_joint_domain>::from_bits(0b0011)));
+      masked::select(a,
+                     masked::subset<short_joint_domain>::from_bits_asserted(
+                         0b0111)) +
+      masked::select(b,
+                     masked::subset<short_joint_domain>::from_bits_asserted(
+                         0b0011)));
 
   EXPECT_EQ(result.result.status, masked::eval_status::mask_mismatch);
   EXPECT_TRUE(result.values.empty());
@@ -162,7 +172,8 @@ TEST(MaskedTest, CompileTimeMaskProvidesStaticOutputArray) {
   std::array<int, joint_domain::size> a{1, 2, 3, 4, 5};
 
   const auto out =
-      masked::eval_array(masked::select<joint_domain, 0b10101>(a) * 2);
+      masked::unchecked_eval_array(masked::select<joint_domain, 0b10101>(a) *
+                                   2);
 
   static_assert(std::tuple_size_v<decltype(out)> == 3);
   static_assert(std::is_same_v<typename decltype(out)::value_type, int>);
@@ -174,7 +185,7 @@ TEST(MaskedTest, CompileTimeMaskProvidesStaticOutputArray) {
 TEST(MaskedTest, EvalArrayAllowsExplicitOutputType) {
   std::array<int, short_joint_domain::size> a{1, 2, 3, 4};
 
-  const auto out = masked::eval_array<double>(
+  const auto out = masked::unchecked_eval_array<double>(
       masked::select<short_joint_domain, 0b1010>(a) / 2.0);
 
   static_assert(std::is_same_v<typename decltype(out)::value_type, double>);
@@ -190,21 +201,23 @@ TEST(MaskedTest, CompileTimeMaskExposesEmptyAndFullProperties) {
   [[maybe_unused]] const auto full = masked::select<tiny_domain, 0b111>(a);
   [[maybe_unused]] const auto partial = masked::select<tiny_domain, 0b011>(a);
 
-  static_assert(decltype(empty)::is_empty);
-  static_assert(!decltype(empty)::is_full);
-  static_assert(!decltype(full)::is_empty);
-  static_assert(decltype(full)::is_full);
-  static_assert(!decltype(partial)::is_empty);
-  static_assert(!decltype(partial)::is_full);
+  static_assert(decltype(empty)::selected().empty());
+  static_assert(!decltype(empty)::selected().is_full());
+  static_assert(!decltype(full)::selected().empty());
+  static_assert(decltype(full)::selected().is_full());
+  static_assert(!decltype(partial)::selected().empty());
+  static_assert(!decltype(partial)::selected().is_full());
 }
 
-TEST(MaskedTest, SparseEvaluatorCanBeSelectedExplicitly) {
+TEST(MaskedTest, RestrictToCanNarrowASelectionExplicitly) {
   std::array<int, short_joint_domain::size> a{1, 2, 3, 4};
   std::array<int, 2> out{};
 
-  masked::sparse_evaluator{}(
+  masked::unchecked_eval_to(
       out.begin(),
-      masked::select(a, masked::subset<short_joint_domain>::from_bits(0b1010)));
+      masked::restrict_to(
+          masked::select_all<short_joint_domain>(a),
+          masked::subset<short_joint_domain>::from_bits_asserted(0b1010)));
 
   EXPECT_EQ(out[0], 2);
   EXPECT_EQ(out[1], 4);
@@ -222,7 +235,7 @@ TEST(MaskedTest, SelectAllUsesEntireDomain) {
 
 TEST(MaskedTest, CheckedScatterWritesBackToOriginalIndices) {
   std::array<int, joint_domain::size> base{10, 20, 30, 40, 50};
-  const auto active = masked::subset<joint_domain>::from_bits(0b10011);
+  const auto active = masked::subset<joint_domain>::from_bits_asserted(0b10011);
 
   const auto result =
       masked::checked_scatter_to(base, masked::select(base, active) + 5);
@@ -234,7 +247,8 @@ TEST(MaskedTest, CheckedScatterWritesBackToOriginalIndices) {
 TEST(MaskedTest, SelectedSizeReportsNumberOfChosenIndices) {
   std::array<int, joint_domain::size> values{1, 2, 3, 4, 5};
   const auto expr =
-      masked::select(values, masked::subset<joint_domain>::from_bits(0b10011));
+      masked::select(values,
+                     masked::subset<joint_domain>::from_bits_asserted(0b10011));
 
   EXPECT_EQ(masked::selected_size(expr), 3U);
 }

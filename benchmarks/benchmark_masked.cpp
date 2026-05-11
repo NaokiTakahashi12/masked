@@ -21,11 +21,11 @@ void BM_RuntimeSubsetMaterialize(benchmark::State &state) {
   auto lhs = make_values(1.0);
   auto rhs = make_values(0.5);
   const auto active =
-      masked::subset<joint_domain>::from_bits(0b1011010110010110);
+      masked::subset<joint_domain>::from_bits_asserted(0b1011010110010110);
 
   for (auto _ : state) {
-    auto result = masked::materialize(masked::select(lhs, active) +
-                                      0.25 * masked::select(rhs, active));
+    auto result = masked::unchecked_materialize(
+        masked::select(lhs, active) + 0.25 * masked::select(rhs, active));
     benchmark::DoNotOptimize(result);
   }
 }
@@ -35,7 +35,7 @@ void BM_CompileTimeSubsetEvalArray(benchmark::State &state) {
   auto rhs = make_values(0.5);
 
   for (auto _ : state) {
-    auto result = masked::eval_array(
+    auto result = masked::unchecked_eval_array(
         masked::select<joint_domain, 0b1011010110010110>(lhs) +
         0.25 * masked::select<joint_domain, 0b1011010110010110>(rhs));
     benchmark::DoNotOptimize(result);
@@ -45,7 +45,7 @@ void BM_CompileTimeSubsetEvalArray(benchmark::State &state) {
 void BM_CheckedScatterTo(benchmark::State &state) {
   auto base = make_values(1.0);
   const auto active =
-      masked::subset<joint_domain>::from_bits(0b1111000011110000);
+      masked::subset<joint_domain>::from_bits_asserted(0b1111000011110000);
 
   for (auto _ : state) {
     auto out = base;
