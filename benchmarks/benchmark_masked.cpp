@@ -55,8 +55,79 @@ void BM_CheckedScatterTo(benchmark::State& state) {
   }
 }
 
+void BM_CheckedGatherCompactFromRuntimeSubset(benchmark::State& state) {
+  auto values = make_values(1.0);
+  const auto active =
+      masked::subset<joint_domain>::from_bits_asserted(0b1011010110010110);
+
+  for (auto _ : state) {
+    auto result = masked::checked_gather_compact_from(values, active);
+    benchmark::DoNotOptimize(result);
+  }
+}
+
+void BM_CheckedScatterCompactToRuntimeSubset(benchmark::State& state) {
+  auto base = make_values(1.0);
+  constexpr std::array<double, 9> compact{
+      1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0};
+  const auto active =
+      masked::subset<joint_domain>::from_bits_asserted(0b1011010110010110);
+
+  for (auto _ : state) {
+    auto out = base;
+    [[maybe_unused]] const auto result =
+        masked::checked_scatter_compact_to(out, compact, active);
+    benchmark::DoNotOptimize(out);
+  }
+}
+
+void BM_CheckedTransformSelectedRuntimeSubset(benchmark::State& state) {
+  auto base = make_values(1.0);
+  const auto active =
+      masked::subset<joint_domain>::from_bits_asserted(0b1111000011110000);
+
+  for (auto _ : state) {
+    auto out = base;
+    [[maybe_unused]] const auto result = masked::checked_transform_selected(
+        out, active, [](auto index, double value) {
+          return value + static_cast<double>(index.value());
+        });
+    benchmark::DoNotOptimize(out);
+  }
+}
+
+void BM_CheckedDomainArrayRuntimeSubset(benchmark::State& state) {
+  auto lhs = make_values(1.0);
+  auto rhs = make_values(0.5);
+  const auto active =
+      masked::subset<joint_domain>::from_bits_asserted(0b1011010110010110);
+
+  for (auto _ : state) {
+    auto result = masked::checked_domain_array(
+        masked::select(lhs, active) - masked::select(rhs, active), -1.0);
+    benchmark::DoNotOptimize(result);
+  }
+}
+
+void BM_UncheckedDotCompileTimeSubset(benchmark::State& state) {
+  auto lhs = make_values(1.0);
+  auto rhs = make_values(0.5);
+
+  for (auto _ : state) {
+    auto result = masked::unchecked_dot(
+        masked::select<joint_domain, 0b1011010110010110>(lhs),
+        masked::select<joint_domain, 0b1011010110010110>(rhs));
+    benchmark::DoNotOptimize(result);
+  }
+}
+
 BENCHMARK(BM_RuntimeSubsetMaterialize);
 BENCHMARK(BM_CompileTimeSubsetEvalArray);
 BENCHMARK(BM_CheckedScatterTo);
+BENCHMARK(BM_CheckedGatherCompactFromRuntimeSubset);
+BENCHMARK(BM_CheckedScatterCompactToRuntimeSubset);
+BENCHMARK(BM_CheckedTransformSelectedRuntimeSubset);
+BENCHMARK(BM_CheckedDomainArrayRuntimeSubset);
+BENCHMARK(BM_UncheckedDotCompileTimeSubset);
 
 } // namespace

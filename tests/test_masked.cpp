@@ -238,12 +238,191 @@ TEST(MaskedTest, CheckedScatterWritesBackToOriginalIndices) {
   EXPECT_EQ(base, (std::array<int, joint_domain::size>{15, 25, 30, 40, 55}));
 }
 
+TEST(MaskedTest, CheckedAddToAccumulatesOnlySelectedIndices) {
+  std::array<int, joint_domain::size> base{10, 20, 30, 40, 50};
+  const auto active =
+      masked::subset<joint_domain>::from_bits_asserted(0b10110);
+
+  const auto result =
+      masked::checked_add_to(base, masked::select(base, active) * 2);
+
+  EXPECT_EQ(result.status, masked::eval_status::ok);
+  EXPECT_EQ(base, (std::array<int, joint_domain::size>{10, 60, 90, 40, 150}));
+}
+
+TEST(MaskedTest, CheckedSubtractFromSubtractsOnlySelectedIndices) {
+  std::array<int, joint_domain::size> base{10, 20, 30, 40, 50};
+  const auto active =
+      masked::subset<joint_domain>::from_bits_asserted(0b01101);
+
+  const auto result =
+      masked::checked_subtract_from(base, masked::select(base, active) - 3);
+
+  EXPECT_EQ(result.status, masked::eval_status::ok);
+  EXPECT_EQ(base, (std::array<int, joint_domain::size>{3, 20, 3, 3, 50}));
+}
+
+TEST(MaskedTest, SelectedMaskReturnsUnderlyingBitsForRuntimeSelection) {
+  std::array<int, joint_domain::size> values{1, 2, 3, 4, 5};
+  const auto expr = masked::select(
+      values, masked::subset<joint_domain>::from_bits_asserted(0b10011));
+
+  EXPECT_EQ(masked::selected_mask(expr), 0b10011);
+}
+
 TEST(MaskedTest, SelectedSizeReportsNumberOfChosenIndices) {
   std::array<int, joint_domain::size> values{1, 2, 3, 4, 5};
   const auto expr = masked::select(
       values, masked::subset<joint_domain>::from_bits_asserted(0b10011));
 
   EXPECT_EQ(masked::selected_size(expr), 3U);
+}
+
+TEST(MaskedTest, CheckedDomainArrayFillsUnselectedEntriesAndWritesSelectedValues) {
+  std::array<int, joint_domain::size> values{1, 2, 3, 4, 5};
+  const auto active =
+      masked::subset<joint_domain>::from_bits_asserted(0b10101);
+
+  const auto result = masked::checked_domain_array(
+      masked::select(values, active) * 10, -1);
+
+  EXPECT_EQ(result.result.status, masked::eval_status::ok);
+  EXPECT_EQ(result.values,
+            (std::array<int, joint_domain::size>{10, -1, 30, -1, 50}));
+}
+
+TEST(MaskedTest, CheckedFillSelectedUpdatesOnlyChosenIndices) {
+  std::array<int, joint_domain::size> values{1, 2, 3, 4, 5};
+  const auto active =
+      masked::subset<joint_domain>::from_bits_asserted(0b01011);
+
+  const auto result = masked::checked_fill_selected(values, active, 99);
+
+  EXPECT_EQ(result.status, masked::eval_status::ok);
+  EXPECT_EQ(values, (std::array<int, joint_domain::size>{99, 99, 3, 99, 5}));
+}
+
+TEST(MaskedTest,
+     CheckedScatterCompactToWritesCompactValuesBackInSelectedIndexOrder) {
+  std::array<int, joint_domain::size> values{10, 20, 30, 40, 50};
+  std::array<int, 3> compact{7, 8, 9};
+  const auto active =
+      masked::subset<joint_domain>::from_bits_asserted(0b10110);
+
+  const auto result =
+      masked::checked_scatter_compact_to(values, compact, active);
+
+  EXPECT_EQ(result.status, masked::eval_status::ok);
+  EXPECT_EQ(values, (std::array<int, joint_domain::size>{10, 7, 8, 40, 9}));
+}
+
+TEST(MaskedTest, CheckedScatterCompactToRejectsCompactInputThatIsTooSmall) {
+  std::array<int, joint_domain::size> values{10, 20, 30, 40, 50};
+  std::array<int, 2> compact{7, 8};
+  const auto active =
+      masked::subset<joint_domain>::from_bits_asserted(0b10110);
+
+  const auto result =
+      masked::checked_scatter_compact_to(values, compact, active);
+
+  EXPECT_EQ(result.status, masked::eval_status::compact_input_size_mismatch);
+  EXPECT_EQ(result.selected_size, 3U);
+}
+
+TEST(MaskedTest, CheckedGatherCompactFromReturnsSelectedValuesInIndexOrder) {
+  std::array<int, joint_domain::size> values{10, 20, 30, 40, 50};
+  const auto active =
+      masked::subset<joint_domain>::from_bits_asserted(0b10110);
+
+  const auto result = masked::checked_gather_compact_from(values, active);
+
+  EXPECT_EQ(result.result.status, masked::eval_status::ok);
+  EXPECT_EQ(result.values, (std::vector<int>{20, 30, 50}));
+}
+
+TEST(MaskedTest, CheckedGatherArrayFromProducesStaticCompactArray) {
+  std::array<int, joint_domain::size> values{10, 20, 30, 40, 50};
+
+  const auto result =
+      masked::checked_gather_array_from<int, decltype(values), joint_domain,
+                                        0b10110>(values);
+
+  static_assert(std::tuple_size_v<decltype(result.values)> == 3);
+  EXPECT_EQ(result.result.status, masked::eval_status::ok);
+  EXPECT_EQ(result.values, (std::array<int, 3>{20, 30, 50}));
+}
+
+TEST(MaskedTest,
+     CheckedTransformSelectedUsesTypedIndicesAndLeavesUnselectedValuesAlone) {
+  std::array<int, joint_domain::size> values{10, 20, 30, 40, 50};
+  const auto active =
+      masked::subset<joint_domain>::from_bits_asserted(0b10101);
+
+  const auto result = masked::checked_transform_selected(
+      values, active,
+      [](auto index, int current) { return current + static_cast<int>(index.value()); });
+
+  EXPECT_EQ(result.status, masked::eval_status::ok);
+  EXPECT_EQ(values, (std::array<int, joint_domain::size>{10, 20, 32, 40, 54}));
+}
+
+TEST(MaskedTest,
+     CheckedTransformSelectedWithStaticSubsetUsesCompileTimeIndices) {
+  std::array<int, joint_domain::size> values{10, 20, 30, 40, 50};
+
+  const auto result = masked::checked_transform_selected(
+      values, masked::subset_constant<joint_domain, 0b01011>(),
+      [](auto index, int current) {
+        constexpr auto offset = static_cast<int>(decltype(index)::value);
+        return current + offset;
+      });
+
+  EXPECT_EQ(result.status, masked::eval_status::ok);
+  EXPECT_EQ(values, (std::array<int, joint_domain::size>{10, 21, 30, 43, 50}));
+}
+
+TEST(MaskedTest, MakeSubsetIfBuildsMaskFromPredicateOverTypedIndices) {
+  const auto selected = masked::make_subset_if<joint_domain>(
+      [](auto index) { return index.value() % 2U == 0U; });
+
+  EXPECT_EQ(selected.raw(), 0b10101);
+}
+
+TEST(MaskedTest, CheckedSumAccumulatesOnlySelectedValues) {
+  std::array<int, joint_domain::size> values{10, 20, 30, 40, 50};
+  const auto active =
+      masked::subset<joint_domain>::from_bits_asserted(0b10110);
+
+  const auto result = masked::checked_sum(masked::select(values, active) / 10);
+
+  EXPECT_EQ(result.result.status, masked::eval_status::ok);
+  EXPECT_EQ(result.value, 10);
+}
+
+TEST(MaskedTest, CheckedDotReturnsProductSumForMatchingSelections) {
+  std::array<int, joint_domain::size> lhs{1, 2, 3, 4, 5};
+  std::array<int, joint_domain::size> rhs{10, 20, 30, 40, 50};
+  const auto active =
+      masked::subset<joint_domain>::from_bits_asserted(0b10101);
+
+  const auto result = masked::checked_dot(masked::select(lhs, active),
+                                          masked::select(rhs, active));
+
+  EXPECT_EQ(result.result.status, masked::eval_status::ok);
+  EXPECT_EQ(result.value, 350);
+}
+
+TEST(MaskedTest, CheckedDotReportsMaskMismatchForDifferentSelections) {
+  std::array<int, short_joint_domain::size> lhs{1, 2, 3, 4};
+  std::array<int, short_joint_domain::size> rhs{10, 20, 30, 40};
+
+  const auto result = masked::checked_dot(
+      masked::select(
+          lhs, masked::subset<short_joint_domain>::from_bits_asserted(0b0111)),
+      masked::select(
+          rhs, masked::subset<short_joint_domain>::from_bits_asserted(0b0011)));
+
+  EXPECT_EQ(result.result.status, masked::eval_status::mask_mismatch);
 }
 
 } // namespace
