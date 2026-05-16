@@ -121,6 +121,30 @@ void BM_UncheckedDotCompileTimeSubset(benchmark::State& state) {
   }
 }
 
+void BM_CheckedMinRuntimeSubset(benchmark::State& state) {
+  auto values = make_values(1.0);
+  const auto active =
+      masked::subset<joint_domain>::from_bits_asserted(0b1011010110010110);
+
+  for (auto _ : state) {
+    auto result = masked::checked_min(masked::select(values, active));
+    benchmark::DoNotOptimize(result);
+  }
+}
+
+void BM_CheckedFindIfRuntimeSubset(benchmark::State& state) {
+  auto values = make_values(1.0);
+  const auto active =
+      masked::subset<joint_domain>::from_bits_asserted(0b1011010110010110);
+
+  for (auto _ : state) {
+    auto result = masked::checked_find_if(
+        masked::select(values, active),
+        [](double value) { return value > 10.0; });
+    benchmark::DoNotOptimize(result);
+  }
+}
+
 BENCHMARK(BM_RuntimeSubsetMaterialize);
 BENCHMARK(BM_CompileTimeSubsetEvalArray);
 BENCHMARK(BM_CheckedScatterTo);
@@ -129,5 +153,7 @@ BENCHMARK(BM_CheckedScatterCompactToRuntimeSubset);
 BENCHMARK(BM_CheckedTransformSelectedRuntimeSubset);
 BENCHMARK(BM_CheckedDomainArrayRuntimeSubset);
 BENCHMARK(BM_UncheckedDotCompileTimeSubset);
+BENCHMARK(BM_CheckedMinRuntimeSubset);
+BENCHMARK(BM_CheckedFindIfRuntimeSubset);
 
 } // namespace

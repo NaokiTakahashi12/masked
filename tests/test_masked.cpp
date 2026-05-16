@@ -399,6 +399,128 @@ TEST(MaskedTest, CheckedSumAccumulatesOnlySelectedValues) {
   EXPECT_EQ(result.value, 10);
 }
 
+TEST(MaskedTest, CheckedMinReturnsSmallestSelectedValue) {
+  std::array<int, joint_domain::size> values{30, 5, 20, 8, 10};
+  const auto active =
+      masked::subset<joint_domain>::from_bits_asserted(0b11110);
+
+  const auto result = masked::checked_min(masked::select(values, active));
+
+  EXPECT_EQ(result.result.status, masked::eval_status::ok);
+  EXPECT_EQ(result.value, 5);
+}
+
+TEST(MaskedTest, CheckedMaxReturnsLargestSelectedValue) {
+  std::array<int, joint_domain::size> values{30, 5, 20, 8, 10};
+  const auto active =
+      masked::subset<joint_domain>::from_bits_asserted(0b11110);
+
+  const auto result = masked::checked_max(masked::select(values, active));
+
+  EXPECT_EQ(result.result.status, masked::eval_status::ok);
+  EXPECT_EQ(result.value, 20);
+}
+
+TEST(MaskedTest, CheckedArgMinReturnsOriginalIndexOfSmallestSelectedValue) {
+  std::array<int, joint_domain::size> values{30, 5, 20, 8, 10};
+  const auto active =
+      masked::subset<joint_domain>::from_bits_asserted(0b11110);
+
+  const auto result = masked::checked_arg_min(masked::select(values, active));
+
+  ASSERT_EQ(result.result.status, masked::eval_status::ok);
+  ASSERT_TRUE(result.value.has_value());
+  EXPECT_EQ(result.value->value(), 1U);
+}
+
+TEST(MaskedTest, CheckedArgMaxReturnsOriginalIndexOfLargestSelectedValue) {
+  std::array<int, joint_domain::size> values{30, 5, 20, 8, 10};
+  const auto active =
+      masked::subset<joint_domain>::from_bits_asserted(0b11110);
+
+  const auto result = masked::checked_arg_max(masked::select(values, active));
+
+  ASSERT_EQ(result.result.status, masked::eval_status::ok);
+  ASSERT_TRUE(result.value.has_value());
+  EXPECT_EQ(result.value->value(), 2U);
+}
+
+TEST(MaskedTest, CheckedFindIfReturnsFirstMatchingOriginalIndex) {
+  std::array<int, joint_domain::size> values{30, 5, 20, 8, 10};
+  const auto active =
+      masked::subset<joint_domain>::from_bits_asserted(0b11110);
+
+  const auto result = masked::checked_find_if(
+      masked::select(values, active), [](int value) { return value % 2 == 0; });
+
+  ASSERT_EQ(result.result.status, masked::eval_status::ok);
+  ASSERT_TRUE(result.value.has_value());
+  EXPECT_EQ(result.value->value(), 2U);
+}
+
+TEST(MaskedTest, CheckedFindIfReturnsNulloptWhenNoSelectedValueMatches) {
+  std::array<int, joint_domain::size> values{30, 5, 20, 8, 10};
+  const auto active =
+      masked::subset<joint_domain>::from_bits_asserted(0b01010);
+
+  const auto result = masked::checked_find_if(
+      masked::select(values, active), [](int value) { return value > 100; });
+
+  EXPECT_EQ(result.result.status, masked::eval_status::ok);
+  EXPECT_FALSE(result.value.has_value());
+}
+
+TEST(MaskedTest, CheckedMinReportsEmptySelectionForEmptySubset) {
+  std::array<int, joint_domain::size> values{30, 5, 20, 8, 10};
+
+  const auto result =
+      masked::checked_min(masked::select(values, masked::none<joint_domain>()));
+
+  EXPECT_EQ(result.result.status, masked::eval_status::empty_selection);
+  EXPECT_EQ(result.result.selected_size, 0U);
+}
+
+TEST(MaskedTest, CheckedMaxReportsEmptySelectionForEmptySubset) {
+  std::array<int, joint_domain::size> values{30, 5, 20, 8, 10};
+
+  const auto result =
+      masked::checked_max(masked::select(values, masked::none<joint_domain>()));
+
+  EXPECT_EQ(result.result.status, masked::eval_status::empty_selection);
+  EXPECT_EQ(result.result.selected_size, 0U);
+}
+
+TEST(MaskedTest, CheckedArgMinReportsEmptySelectionForEmptySubset) {
+  std::array<int, joint_domain::size> values{30, 5, 20, 8, 10};
+
+  const auto result = masked::checked_arg_min(
+      masked::select(values, masked::none<joint_domain>()));
+
+  EXPECT_EQ(result.result.status, masked::eval_status::empty_selection);
+  EXPECT_FALSE(result.value.has_value());
+}
+
+TEST(MaskedTest, CheckedArgMaxReportsEmptySelectionForEmptySubset) {
+  std::array<int, joint_domain::size> values{30, 5, 20, 8, 10};
+
+  const auto result = masked::checked_arg_max(
+      masked::select(values, masked::none<joint_domain>()));
+
+  EXPECT_EQ(result.result.status, masked::eval_status::empty_selection);
+  EXPECT_FALSE(result.value.has_value());
+}
+
+TEST(MaskedTest, CheckedFindIfReportsEmptySelectionForEmptySubset) {
+  std::array<int, joint_domain::size> values{30, 5, 20, 8, 10};
+
+  const auto result = masked::checked_find_if(
+      masked::select(values, masked::none<joint_domain>()),
+      [](int value) { return value > 0; });
+
+  EXPECT_EQ(result.result.status, masked::eval_status::empty_selection);
+  EXPECT_FALSE(result.value.has_value());
+}
+
 TEST(MaskedTest, CheckedDotReturnsProductSumForMatchingSelections) {
   std::array<int, joint_domain::size> lhs{1, 2, 3, 4, 5};
   std::array<int, joint_domain::size> rhs{10, 20, 30, 40, 50};

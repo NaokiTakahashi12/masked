@@ -340,6 +340,128 @@ template <class T = void, detail::expression Expr>
                                     unchecked_sum<output_type>(expr)};
 }
 
+template <class T = void, detail::expression Expr, class Compare>
+[[nodiscard]] auto checked_min_max(const Expr& expr, Compare&& compare) {
+  static_assert(Expr::has_sequence,
+                "masked::checked_min_max requires an expression containing "
+                "select()");
+  using output_type =
+      detail::requested_or_inferred_t<T, typename Expr::value_type>;
+
+  const auto validation = validate(expr);
+  if (!validation) {
+    return reduce_result<output_type>{validation, {}};
+  }
+  if (validation.selected_size == 0) {
+    return reduce_result<output_type>{{eval_status::empty_selection, 0, 0, 0},
+                                      {}};
+  }
+
+  auto state = expr.make_state();
+  output_type best = static_cast<output_type>(expr.value(state));
+  for (std::size_t rank = 1; rank < validation.selected_size; ++rank) {
+    expr.advance(state);
+    auto candidate = static_cast<output_type>(expr.value(state));
+    if (compare(candidate, best)) {
+      best = std::move(candidate);
+    }
+  }
+  return reduce_result<output_type>{validation, std::move(best)};
+}
+
+template <class T = void, detail::expression Expr>
+[[nodiscard]] auto checked_min(const Expr& expr) {
+  return checked_min_max<T>(
+      expr, [](const auto& lhs, const auto& rhs) { return lhs < rhs; });
+}
+
+template <class T = void, detail::expression Expr>
+[[nodiscard]] auto checked_max(const Expr& expr) {
+  return checked_min_max<T>(
+      expr, [](const auto& lhs, const auto& rhs) { return rhs < lhs; });
+}
+
+template <detail::expression Expr, class Compare>
+[[nodiscard]] auto checked_arg_min_max(const Expr& expr, Compare&& compare) {
+  static_assert(Expr::has_sequence,
+                "masked::checked_arg_min_max requires an expression "
+                "containing select()");
+  using domain_type = typename Expr::domain_type;
+  using index_type = typed_index<domain_type>;
+  using result_type = reduce_result<std::optional<index_type>>;
+
+  const auto validation = validate(expr);
+  if (!validation) {
+    return result_type{validation, std::nullopt};
+  }
+  if (validation.selected_size == 0) {
+    return result_type{{eval_status::empty_selection, 0, 0, 0}, std::nullopt};
+  }
+
+  index_type best_index = index_type::unchecked(0);
+  typename Expr::value_type best_value{};
+  bool first = true;
+  detail::unchecked_for_each_index_value(
+      expr, [&](auto index_token, auto&& value) {
+        using value_ref_type = decltype(value);
+        if (first) {
+          best_index = index_type::unchecked(detail::index_value(index_token));
+          best_value = static_cast<typename Expr::value_type>(
+              std::forward<value_ref_type>(value));
+          first = false;
+          return;
+        }
+
+        const auto candidate = static_cast<typename Expr::value_type>(
+            std::forward<value_ref_type>(value));
+        if (compare(candidate, best_value)) {
+          best_index = index_type::unchecked(detail::index_value(index_token));
+          best_value = candidate;
+        }
+      });
+
+  return result_type{validation, std::optional<index_type>(best_index)};
+}
+
+template <detail::expression Expr>
+[[nodiscard]] auto checked_arg_min(const Expr& expr) {
+  return checked_arg_min_max(
+      expr, [](const auto& lhs, const auto& rhs) { return lhs < rhs; });
+}
+
+template <detail::expression Expr>
+[[nodiscard]] auto checked_arg_max(const Expr& expr) {
+  return checked_arg_min_max(
+      expr, [](const auto& lhs, const auto& rhs) { return rhs < lhs; });
+}
+
+template <detail::expression Expr, class Pred>
+[[nodiscard]] auto checked_find_if(const Expr& expr, Pred&& pred) {
+  static_assert(Expr::has_sequence,
+                "masked::checked_find_if requires an expression containing "
+                "select()");
+  using domain_type = typename Expr::domain_type;
+  using index_type = typed_index<domain_type>;
+  using result_type = reduce_result<std::optional<index_type>>;
+
+  const auto validation = validate(expr);
+  if (!validation) {
+    return result_type{validation, std::nullopt};
+  }
+  if (validation.selected_size == 0) {
+    return result_type{{eval_status::empty_selection, 0, 0, 0}, std::nullopt};
+  }
+
+  std::optional<index_type> found{};
+  detail::unchecked_for_each_index_value(
+      expr, [&](auto index_token, auto&& value) {
+        if (!found.has_value() && pred(std::forward<decltype(value)>(value))) {
+          found = index_type::unchecked(detail::index_value(index_token));
+        }
+      });
+  return result_type{validation, found};
+}
+
 template <class T = void, class Lhs, class Rhs>
 requires((detail::expression<Lhs> || detail::expression<Rhs>))
     [[nodiscard]] auto checked_dot(Lhs&& lhs, Rhs&& rhs) {
