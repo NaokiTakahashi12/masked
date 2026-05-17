@@ -119,6 +119,59 @@ void scatter_demo() {
   std::cout << "\n";
 }
 
+void fault_aware_command_synthesis_demo() {
+  std::array<double, actuator_domain::size> position{0.10, -0.20, 0.35,
+                                                     0.05, -0.10, 0.40};
+  std::array<double, actuator_domain::size> velocity{0.00, 0.30,  -0.20,
+                                                     0.10, -0.40, 0.20};
+  std::array<double, actuator_domain::size> target_position{0.20, -0.10, 0.10,
+                                                            0.00, 0.15,  0.30};
+  std::array<double, actuator_domain::size> target_velocity{0.00, 0.00, 0.00,
+                                                            0.00, 0.00, 0.00};
+  std::array<double, actuator_domain::size> stiffness{120.0, 90.0,  100.0,
+                                                      80.0,  110.0, 95.0};
+  std::array<double, actuator_domain::size> damping{8.0, 6.0, 7.0,
+                                                    5.0, 9.0, 6.5};
+  std::array<double, actuator_domain::size> feedforward{1.0, 0.0, -0.5,
+                                                        0.2, 0.8, -0.1};
+
+  // Actuators 1 and 4 are isolated, so only the healthy set receives commands.
+  const auto healthy =
+      masked::subset<actuator_domain>::from_bits_asserted(0b101101);
+
+  const auto tracking_error = masked::select(target_position, healthy) -
+                              masked::select(position, healthy);
+  const auto damping_error = masked::select(target_velocity, healthy) -
+                             masked::select(velocity, healthy);
+  const auto torque_expr = masked::select(stiffness, healthy) * tracking_error +
+                           masked::select(damping, healthy) * damping_error +
+                           masked::select(feedforward, healthy);
+
+  const auto command = masked::checked_domain_array(torque_expr, 0.0);
+  const auto worst_error =
+      masked::checked_arg_max(tracking_error * tracking_error);
+  const auto overloaded =
+      masked::checked_find_if(torque_expr, [](double torque) {
+        return torque > 12.0 || torque < -12.0;
+      });
+
+  std::cout << "fault-aware command synthesis\n";
+  std::cout << "  command status: " << status_name(command.result.status)
+            << "\n";
+  print_range("  full torque command", command.values);
+  if (worst_error.value.has_value()) {
+    std::cout << "  largest tracking error actuator: "
+              << worst_error.value->value() << "\n";
+  }
+  if (overloaded.value.has_value()) {
+    std::cout << "  first actuator over torque budget: "
+              << overloaded.value->value() << "\n";
+  } else {
+    std::cout << "  first actuator over torque budget: none\n";
+  }
+  std::cout << "\n";
+}
+
 } // namespace
 
 auto main() -> int {
@@ -127,5 +180,6 @@ auto main() -> int {
   compile_time_mask_demo();
   validation_demo();
   scatter_demo();
+  fault_aware_command_synthesis_demo();
   return 0;
 }
