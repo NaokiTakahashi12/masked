@@ -357,14 +357,18 @@ template <class T = void, detail::expression Expr, class Compare>
                                       {}};
   }
 
-  auto state = expr.make_state();
-  output_type best = static_cast<output_type>(expr.value(state));
-  for (std::size_t rank = 1; rank < validation.selected_size; ++rank) {
-    expr.advance(state);
-    auto candidate = static_cast<output_type>(expr.value(state));
-    if (compare(candidate, best)) {
+  output_type best{};
+  bool first = true;
+  detail::unchecked_for_each_index_value(expr, [&](auto, auto&& value) {
+    auto candidate = static_cast<output_type>(std::forward<decltype(value)>(value));
+    if (first || compare(candidate, best)) {
       best = std::move(candidate);
+      first = false;
     }
+  });
+  if (first) {
+    return reduce_result<output_type>{{eval_status::empty_selection, 0, 0, 0},
+                                      {}};
   }
   return reduce_result<output_type>{validation, std::move(best)};
 }
@@ -453,12 +457,37 @@ template <detail::expression Expr, class Pred>
   }
 
   std::optional<index_type> found{};
-  detail::unchecked_for_each_index_value(
-      expr, [&](auto index_token, auto&& value) {
-        if (!found.has_value() && pred(std::forward<decltype(value)>(value))) {
-          found = index_type::unchecked(detail::index_value(index_token));
+  if constexpr (Expr::has_static_mask) {
+    detail::for_each_static_index<typename Expr::domain_type, Expr::static_mask>(
+        [&](auto index_constant) {
+          if (found.has_value()) {
+            return;
+          }
+          constexpr auto index = decltype(index_constant)::value;
+          if (pred(expr.unchecked_value_at(index))) {
+            found = index_type::unchecked(index);
+          }
+        });
+  } else {
+    using mask_type = typename Expr::mask_type;
+    if (expr.mask_value() == domain_type::full_mask()) {
+      for (std::size_t index = 0; index < domain_type::size; ++index) {
+        if (pred(expr.unchecked_value_at(index))) {
+          found = index_type::unchecked(index);
+          break;
         }
-      });
+      }
+    } else {
+      auto cursor = detail::mask_cursor<mask_type>(expr.mask_value());
+      while (cursor.has_next()) {
+        const auto index = cursor.next();
+        if (pred(expr.unchecked_value_at(index))) {
+          found = index_type::unchecked(index);
+          break;
+        }
+      }
+    }
+  }
   return result_type{validation, found};
 }
 

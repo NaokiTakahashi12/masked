@@ -67,16 +67,11 @@ constexpr void unchecked_for_each_index_value(const Expr& expr, Fn&& fn) {
       return;
     }
 
-    auto state = expr.make_state();
     auto cursor = mask_cursor<typename Expr::mask_type>(expr.mask_value());
-    const auto size = expr.size();
-    for (std::size_t rank = 0; rank < size; ++rank) {
+    while (cursor.has_next()) {
       const auto index = cursor.next();
       std::forward<Fn>(fn)(typed_index<domain_type>::unchecked(index),
-                           expr.value(state));
-      if (rank + 1 < size) {
-        expr.advance(state);
-      }
+                           expr.unchecked_value_at(index));
     }
   }
 }
