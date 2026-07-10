@@ -1,6 +1,13 @@
 #pragma once
 
 #include <bit>
+#include <cassert>
+#include <concepts>
+#include <cstdint>
+#include <iterator>
+#include <limits>
+#include <type_traits>
+#include <utility>
 
 #include <masked/fwd.hpp>
 

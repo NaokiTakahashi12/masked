@@ -1,5 +1,9 @@
 #pragma once
 
+#include <cstddef>
+#include <type_traits>
+#include <utility>
+
 #include <masked/expressions.hpp>
 
 namespace masked::detail {

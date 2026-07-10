@@ -1,7 +1,11 @@
 #pragma once
 
+#include <array>
+#include <cassert>
+#include <initializer_list>
 #include <limits>
 #include <optional>
+#include <span>
 
 #include <masked/detail/domain_support.hpp>
 

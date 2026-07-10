@@ -1,5 +1,12 @@
 #pragma once
 
+#include <array>
+#include <optional>
+#include <span>
+#include <type_traits>
+#include <utility>
+#include <vector>
+
 #include <masked/selection.hpp>
 
 namespace masked {

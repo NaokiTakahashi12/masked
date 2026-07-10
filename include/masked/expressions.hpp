@@ -1,5 +1,11 @@
 #pragma once
 
+#include <cassert>
+#include <cstddef>
+#include <span>
+#include <type_traits>
+#include <utility>
+
 #include <masked/detail/expression_meta.hpp>
 
 namespace masked {

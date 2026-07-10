@@ -1,6 +1,6 @@
 # masked
 
-`masked` is a small C++20 library for lazy subset operations over contiguous
+`masked` is a small header-only C++20 library for lazy subset operations over contiguous
 arrays over a typed finite index domain. A subset is represented by a domain-
 specific bitmask, and sequence expressions are combined by original index, not
 by rank.
