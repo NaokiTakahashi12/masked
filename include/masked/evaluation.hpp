@@ -7,6 +7,7 @@
 #include <utility>
 #include <vector>
 
+#include <masked/results.hpp>
 #include <masked/selection.hpp>
 
 namespace masked {

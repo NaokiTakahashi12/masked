@@ -1,16 +1,11 @@
 #pragma once
 
-#include <array>
-#include <cassert>
 #include <cstddef>
 #include <cstdint>
-#include <cstdlib>
-#include <span>
-#include <vector>
 
 namespace masked {
 
-inline constexpr std::size_t dynamic_extent = std::dynamic_extent;
+inline constexpr std::size_t dynamic_extent = static_cast<std::size_t>(-1);
 
 enum class eval_status {
   ok,
@@ -36,33 +31,6 @@ struct eval_result {
 
   [[nodiscard]] constexpr explicit operator bool() const noexcept {
     return status == eval_status::ok;
-  }
-};
-
-template <class T> struct materialize_result {
-  eval_result result{};
-  std::vector<T> values{};
-
-  [[nodiscard]] constexpr explicit operator bool() const noexcept {
-    return static_cast<bool>(result);
-  }
-};
-
-template <class T, std::size_t Extent> struct array_result {
-  eval_result result{};
-  std::array<T, Extent> values{};
-
-  [[nodiscard]] constexpr explicit operator bool() const noexcept {
-    return static_cast<bool>(result);
-  }
-};
-
-template <class T> struct reduce_result {
-  eval_result result{};
-  T value{};
-
-  [[nodiscard]] constexpr explicit operator bool() const noexcept {
-    return static_cast<bool>(result);
   }
 };
 

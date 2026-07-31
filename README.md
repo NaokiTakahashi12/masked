@@ -1,9 +1,9 @@
 # masked
 
-`masked` is a small header-only C++20 library for lazy subset operations over contiguous
-arrays over a typed finite index domain. A subset is represented by a domain-
-specific bitmask, and sequence expressions are combined by original index, not
-by rank.
+`masked` is a small header-only C++20 library for lazy subset operations over
+contiguous arrays over a typed finite index domain. A subset is represented by
+a domain-specific bitmask, and sequence expressions are combined by original
+index, not by rank.
 
 ```cpp
 #include <masked/masked.hpp>
@@ -66,6 +66,19 @@ position[4] * velocity[4] + 2
   reductions and searches.
 - `empty_selection` reports checked operations that require at least one
   selected value.
+
+## Header Selection
+
+- `#include <masked/masked.hpp>` imports the full API, including evaluation and
+  materialization helpers.
+- `#include <masked/core.hpp>` imports domains, subsets, selections, and lazy
+  expression construction without pulling in the checked/unchecked evaluation
+  algorithms.
+- `#include <masked/domain.hpp>` is enough for domain and subset utilities
+  alone.
+
+For build-time-sensitive users, prefer the narrowest header that matches the
+call site instead of the umbrella header.
 
 Checked and unchecked evaluation into an aliased output range is not guaranteed
 to behave correctly. Use `unchecked_materialize` or `checked_materialize` to
